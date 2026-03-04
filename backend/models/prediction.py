@@ -1,0 +1,126 @@
+"""
+Sports AI — Prediction Model
+Pydantic schemas for predictions and analysis results.
+"""
+
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict
+from datetime import datetime
+from enum import Enum
+
+
+class RiskLevel(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    EXTREME = "EXTREME"
+
+
+class ConfidenceLevel(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    VERY_HIGH = "VERY HIGH"
+
+
+class AgentStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    ERROR = "error"
+
+
+class AgentResult(BaseModel):
+    """Result from a single agent execution."""
+    agent_name: str
+    status: AgentStatus = AgentStatus.PENDING
+    execution_time_ms: float = 0
+    data: Dict = {}
+    error: Optional[str] = None
+
+
+class ProbabilityDistribution(BaseModel):
+    """Match outcome probabilities."""
+    home_win: float = Field(0.0, ge=0, le=1)
+    draw: float = Field(0.0, ge=0, le=1)
+    away_win: float = Field(0.0, ge=0, le=1)
+
+
+class ExpectedGoals(BaseModel):
+    """Expected goals for each team."""
+    home: float = 0.0
+    away: float = 0.0
+
+
+class ScoreProb(BaseModel):
+    """Probability for a specific score."""
+    home_goals: int
+    away_goals: int
+    probability: float
+
+
+class MarketEdge(BaseModel):
+    """Market inefficiency detection."""
+    bet_type: str
+    model_probability: float
+    market_probability: float
+    edge: float
+    odds: float
+    is_value_bet: bool = False
+
+
+class BetRecommendation(BaseModel):
+    """Final bet recommendation."""
+    bet_type: str
+    team: str
+    probability: float
+    market_odds: float
+    value_edge: float
+    recommended_stake_pct: float
+    confidence: ConfidenceLevel = ConfidenceLevel.MEDIUM
+    risk_level: RiskLevel = RiskLevel.MEDIUM
+    confidence_score: float = Field(0.0, ge=0, le=10)
+
+
+class MonteCarloResult(BaseModel):
+    """Monte Carlo simulation results."""
+    simulations: int = 50000
+    home_win_pct: float = 0.0
+    draw_pct: float = 0.0
+    away_win_pct: float = 0.0
+    avg_goals_home: float = 0.0
+    avg_goals_away: float = 0.0
+    most_likely_score: str = "0-0"
+    goal_distribution: Dict[str, float] = {}
+    score_distribution: List[ScoreProb] = []
+
+
+class PredictionResult(BaseModel):
+    """Complete prediction output from the pipeline."""
+    id: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # Input
+    query: str
+    home_team: str
+    away_team: str
+    league: Optional[str] = None
+
+    # Agent results timeline
+    agents: List[AgentResult] = []
+
+    # Core predictions
+    probabilities: ProbabilityDistribution = ProbabilityDistribution()
+    expected_goals: ExpectedGoals = ExpectedGoals()
+    score_matrix: List[ScoreProb] = []
+    monte_carlo: MonteCarloResult = MonteCarloResult()
+
+    # Market analysis
+    market_edges: List[MarketEdge] = []
+
+    # Final recommendation
+    best_bet: Optional[BetRecommendation] = None
+
+    # Metadata
+    total_execution_time_ms: float = 0
+    pipeline_version: str = "1.0.0"
