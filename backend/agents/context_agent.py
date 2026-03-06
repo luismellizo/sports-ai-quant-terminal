@@ -5,10 +5,23 @@ Uses API-Football standings + team statistics + DeepSeek for deep contextual ana
 """
 
 import json
+import re
+import unicodedata
 from typing import Dict, Any, List
 from backend.agents.base_agent import BaseAgent
 from backend.services.api_football_client import get_api_football_client
 from backend.llm.llm_router import get_llm_router
+
+
+def sanitize_team_name(name: str) -> str:
+    """Strip diacritics and non-alphanumeric chars for API-Football search."""
+    # Normalize unicode → decompose accented chars → remove combining marks
+    nfkd = unicodedata.normalize("NFKD", name)
+    ascii_only = "".join(c for c in nfkd if not unicodedata.combining(c))
+    # Keep only alphanumeric and spaces
+    clean = re.sub(r"[^a-zA-Z0-9\s]", "", ascii_only)
+    # Collapse multiple spaces
+    return re.sub(r"\s+", " ", clean).strip()
 
 # Known rivalries database
 RIVALRIES = {
@@ -58,9 +71,11 @@ class ContextAgent(BaseAgent):
 
         api = get_api_football_client()
 
-        # Search for teams
-        home_results = await api.search_teams(context.get("team_home", ""))
-        away_results = await api.search_teams(context.get("team_away", ""))
+        # Search for teams (sanitize names for API-Football compatibility)
+        home_search = sanitize_team_name(context.get("team_home", ""))
+        away_search = sanitize_team_name(context.get("team_away", ""))
+        home_results = await api.search_teams(home_search)
+        away_results = await api.search_teams(away_search)
 
         home_team = home_results[0] if home_results else None
         away_team = away_results[0] if away_results else None
