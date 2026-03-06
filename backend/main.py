@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.api.routes import router
+from backend.api.admin_routes import admin_router
 from backend.config.settings import get_settings
 from backend.config.database import init_db
 from backend.utils.cache import close_redis
@@ -28,6 +29,7 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Sports AI starting up...")
     logger.info(f"   Environment: {settings.app_env}")
     logger.info(f"   LLM Provider: {settings.llm_provider}")
+    logger.info(f"   Max concurrent pipelines: {settings.max_concurrent_pipelines}")
 
     # Initialize database tables (dev only)
     if settings.is_development:
@@ -65,6 +67,7 @@ app.add_middleware(
 
 # Mount routes
 app.include_router(router)
+app.include_router(admin_router)
 
 
 if __name__ == "__main__":

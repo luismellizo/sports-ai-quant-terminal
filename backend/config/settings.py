@@ -45,6 +45,14 @@ class Settings(BaseSettings):
     monte_carlo_simulations: int = 50_000
     cache_ttl: int = 3600  # 1 hour
 
+    # ── Admin ─────────────────────────────────────────────────────
+    admin_user: str = "admin"
+    admin_password: str = "Masflow2@"
+    admin_secret_key: str = "sports-ai-admin-secret-key-2026"
+
+    # ── Concurrency ───────────────────────────────────────────────
+    max_concurrent_pipelines: int = 15
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

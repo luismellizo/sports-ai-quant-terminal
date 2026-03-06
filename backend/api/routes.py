@@ -8,10 +8,45 @@ from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 from backend.agents.orchestrator_agent import OrchestratorAgent
 from backend.services.api_football_client import get_api_football_client
+from backend.config.database import async_session
+from backend.models.prediction_record import PredictionRecord
 from backend.utils.logger import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api")
+
+
+async def _save_prediction(prediction_data: dict):
+    """Persist a completed prediction to the database."""
+    try:
+        record = PredictionRecord(
+            prediction_id=prediction_data.get("id", ""),
+            query=prediction_data.get("query", ""),
+            home_team=prediction_data.get("home_team", ""),
+            away_team=prediction_data.get("away_team", ""),
+            league=prediction_data.get("league"),
+            probabilities=prediction_data.get("probabilities"),
+            best_bet=prediction_data.get("best_bet"),
+            monte_carlo_summary={
+                "simulations": prediction_data.get("monte_carlo", {}).get("simulations"),
+                "home_win_pct": prediction_data.get("monte_carlo", {}).get("home_win_pct"),
+                "draw_pct": prediction_data.get("monte_carlo", {}).get("draw_pct"),
+                "away_win_pct": prediction_data.get("monte_carlo", {}).get("away_win_pct"),
+                "most_likely_score": prediction_data.get("monte_carlo", {}).get("most_likely_score"),
+            },
+            executive_summary=prediction_data.get("executive_summary", ""),
+            verdict=prediction_data.get("verdict", ""),
+            total_execution_time_ms=prediction_data.get("total_execution_time_ms", 0),
+            fixture_id=prediction_data.get("fixture_resolution", {}).get("fixture_id")
+                if isinstance(prediction_data.get("fixture_resolution"), dict) else None,
+        )
+
+        async with async_session() as session:
+            session.add(record)
+            await session.commit()
+            logger.info(f"✓ Prediction {record.prediction_id} saved to database")
+    except Exception as e:
+        logger.error(f"✗ Failed to save prediction: {e}")
 
 
 @router.post("/analyze")
@@ -32,6 +67,13 @@ async def analyze_match(body: dict):
 
     async def event_stream():
         async for event in orchestrator.run_pipeline(query):
+            # Intercept pipeline_complete to save prediction
+            try:
+                parsed = json.loads(event)
+                if parsed.get("event") == "pipeline_complete":
+                    await _save_prediction(parsed.get("data", {}))
+            except Exception:
+                pass
             yield f"data: {event}\n\n"
 
     return StreamingResponse(
@@ -62,6 +104,9 @@ async def analyze_match_sync(body: dict):
         parsed = json.loads(event)
         if parsed.get("event") == "pipeline_complete":
             result = parsed.get("data")
+
+    if result:
+        await _save_prediction(result)
 
     return result or {"error": "Pipeline failed"}
 
@@ -108,13 +153,28 @@ async def get_match(fixture_id: int):
 
 @router.get("/prediction/{prediction_id}")
 async def get_prediction(prediction_id: str):
-    """
-    Get a stored prediction by ID.
-    TODO: Implement DB storage for predictions.
-    """
+    """Get a stored prediction by ID."""
+    from sqlalchemy import select
+
+    async with async_session() as session:
+        stmt = select(PredictionRecord).where(
+            PredictionRecord.prediction_id == prediction_id
+        )
+        result = await session.execute(stmt)
+        record = result.scalar_one_or_none()
+
+    if not record:
+        return {"error": "Prediction not found", "prediction_id": prediction_id}
+
     return {
-        "message": "Prediction storage coming soon",
-        "prediction_id": prediction_id,
+        "prediction_id": record.prediction_id,
+        "query": record.query,
+        "home_team": record.home_team,
+        "away_team": record.away_team,
+        "league": record.league,
+        "probabilities": record.probabilities,
+        "best_bet": record.best_bet,
+        "created_at": record.created_at.isoformat() if record.created_at else None,
     }
 
 

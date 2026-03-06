@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import TerminalInput from '@/components/TerminalInput';
 import AgentTimeline from '@/components/AgentTimeline';
 import ProbabilityBars from '@/components/ProbabilityBars';
@@ -19,6 +20,24 @@ export default function Home() {
   const [prediction, setPrediction] = useState<PredictionResult | null>(null);
   const [currentQuery, setCurrentQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Secret admin access: triple-click on logo
+  const router = useRouter();
+  const clickCountRef = useRef(0);
+  const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleLogoClick = useCallback(() => {
+    clickCountRef.current += 1;
+    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    if (clickCountRef.current >= 3) {
+      clickCountRef.current = 0;
+      router.push('/admin');
+      return;
+    }
+    clickTimerRef.current = setTimeout(() => {
+      clickCountRef.current = 0;
+    }, 600);
+  }, [router]);
 
   const handleAnalyze = useCallback(async (query: string) => {
     setIsLoading(true);
@@ -137,13 +156,17 @@ export default function Home() {
       {/* Header */}
       <header className="app-header">
         <div className="app-header-left">
-          <span style={{
-            color: 'var(--accent-green)',
-            fontSize: '22px',
-            fontWeight: 700,
-            textShadow: '0 0 15px rgba(0, 255, 136, 0.4)',
-            letterSpacing: '3px',
-          }}>
+          <span
+            onClick={handleLogoClick}
+            style={{
+              color: 'var(--accent-green)',
+              fontSize: '22px',
+              fontWeight: 700,
+              textShadow: '0 0 15px rgba(0, 255, 136, 0.4)',
+              letterSpacing: '3px',
+              userSelect: 'none',
+            }}
+          >
             ◆ SPORTS AI
           </span>
           <span style={{

@@ -31,9 +31,14 @@ from backend.models.prediction import (
     AgentResult,
     AgentStatus,
 )
+from backend.config.settings import get_settings
 from backend.utils.logger import get_logger
 
 logger = get_logger(__name__)
+settings = get_settings()
+
+# Semaphore to limit concurrent pipeline executions
+_pipeline_semaphore = asyncio.Semaphore(settings.max_concurrent_pipelines)
 
 # Agent pipeline in execution order
 PIPELINE: List[BaseAgent] = [
@@ -86,68 +91,73 @@ class OrchestratorAgent:
     async def run_pipeline(self, query: str) -> AsyncGenerator[str, None]:
         """
         Execute the full agent pipeline with SSE streaming.
+        Uses a semaphore to limit concurrent pipelines.
 
         Yields:
             JSON-encoded SSE events for each agent completion.
         """
-        prediction_id = str(uuid.uuid4())[:8]
-        context: Dict[str, Any] = {"query": query}
-        agent_results: List[Dict] = []
-        pipeline_start = time.time()
+        await _pipeline_semaphore.acquire()
+        try:
+            prediction_id = str(uuid.uuid4())[:8]
+            context: Dict[str, Any] = {"query": query}
+            agent_results: List[Dict] = []
+            pipeline_start = time.time()
 
-        self.logger.info(f"═══ Starting pipeline {prediction_id} for: '{query}' ═══")
+            self.logger.info(f"═══ Starting pipeline {prediction_id} for: '{query}' ═══")
 
-        # Send initial event
-        yield self._sse_event("pipeline_start", {
-            "id": prediction_id,
-            "query": query,
-            "total_agents": len(PIPELINE),
-        })
-
-        # Execute agents sequentially
-        for i, agent in enumerate(PIPELINE):
-            agent_name = agent.__class__.__name__
-            label = AGENT_LABELS.get(agent_name, agent_name)
-
-            # Send agent start event
-            yield self._sse_event("agent_start", {
-                "index": i,
-                "name": agent_name,
-                "label": label,
+            # Send initial event
+            yield self._sse_event("pipeline_start", {
+                "id": prediction_id,
+                "query": query,
+                "total_agents": len(PIPELINE),
             })
 
-            # Execute agent
-            result = await agent.run(context)
+            # Execute agents sequentially
+            for i, agent in enumerate(PIPELINE):
+                agent_name = agent.__class__.__name__
+                label = AGENT_LABELS.get(agent_name, agent_name)
 
-            # Merge results into context
-            if result.status == AgentStatus.COMPLETED and result.data:
-                context.update(result.data)
+                # Send agent start event
+                yield self._sse_event("agent_start", {
+                    "index": i,
+                    "name": agent_name,
+                    "label": label,
+                })
 
-            agent_results.append({
-                "agent_name": agent_name,
-                "label": label,
-                "status": result.status.value,
-                "execution_time_ms": result.execution_time_ms,
-                "error": result.error,
-            })
+                # Execute agent
+                result = await agent.run(context)
 
-            # Send agent complete event
-            yield self._sse_event("agent_complete", {
-                "index": i,
-                "name": agent_name,
-                "label": label,
-                "status": result.status.value,
-                "execution_time_ms": result.execution_time_ms,
-            })
+                # Merge results into context
+                if result.status == AgentStatus.COMPLETED and result.data:
+                    context.update(result.data)
 
-        # Build final prediction
-        total_time = (time.time() - pipeline_start) * 1000
-        prediction = self._build_prediction(prediction_id, query, context, agent_results, total_time)
+                agent_results.append({
+                    "agent_name": agent_name,
+                    "label": label,
+                    "status": result.status.value,
+                    "execution_time_ms": result.execution_time_ms,
+                    "error": result.error,
+                })
 
-        # Send final result
-        yield self._sse_event("pipeline_complete", prediction)
+                # Send agent complete event
+                yield self._sse_event("agent_complete", {
+                    "index": i,
+                    "name": agent_name,
+                    "label": label,
+                    "status": result.status.value,
+                    "execution_time_ms": result.execution_time_ms,
+                })
 
-        self.logger.info(f"═══ Pipeline {prediction_id} completed in {total_time:.0f}ms ═══")
+            # Build final prediction
+            total_time = (time.time() - pipeline_start) * 1000
+            prediction = self._build_prediction(prediction_id, query, context, agent_results, total_time)
+
+            # Send final result
+            yield self._sse_event("pipeline_complete", prediction)
+
+            self.logger.info(f"═══ Pipeline {prediction_id} completed in {total_time:.0f}ms ═══")
+        finally:
+            _pipeline_semaphore.release()
 
     def _build_prediction(
         self,
