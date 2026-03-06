@@ -1,20 +1,42 @@
 """
 Sports AI — Agent 13: Risk Management Agent
 Calculates recommended stake using Kelly Criterion and produces final recommendation.
+Uses DeepSeek for professional-grade risk assessment narrative.
 """
 
+import json
 from typing import Dict, Any
 from backend.agents.base_agent import BaseAgent
 from backend.services.odds_service import OddsService
+from backend.llm.llm_router import get_llm_router
 from backend.models.prediction import (
     BetRecommendation,
     ConfidenceLevel,
     RiskLevel,
 )
 
+RISK_SYSTEM_PROMPT = """Eres un gestor de riesgo profesional de un fondo de apuestas deportivas (sports trading fund). Recibirás todos los datos del análisis completo de un partido.
+
+Tu trabajo es generar una recomendación de riesgo profesional:
+1. Evaluar el Kelly Criterion calculado y si es apropiado para este escenario
+2. Argumentar la recomendación final con datos específicos
+3. Identificar los principales riesgos de la apuesta
+4. Sugerir ajustes al stake basados en factores cualitativos
+5. Proporcionar una recomendación como lo haría un portfolio manager profesional
+
+Devuelve ÚNICAMENTE un objeto JSON:
+{
+  "risk_narrative": "3-5 líneas con la recomendación profesional completa, como un memo de trading",
+  "stake_justification": "por qué el stake recomendado es apropiado (o no) para este partido",
+  "key_risks": ["riesgo1", "riesgo2", "riesgo3"],
+  "risk_mitigation": "cómo mitigar los riesgos identificados",
+  "professional_verdict": "APOSTAR/PASAR/MONITOREAR — con justificación de 2-3 líneas",
+  "bankroll_advice": "consejo específico de gestión de bankroll para esta apuesta"
+}"""
+
 
 class RiskAgent(BaseAgent):
-    """Final agent: calculates stake, confidence, and risk level."""
+    """Final agent: calculates stake, confidence, and risk with LLM narrative."""
 
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         model_probs = context.get("model_probabilities", {})
@@ -26,7 +48,7 @@ class RiskAgent(BaseAgent):
         match_importance = context.get("match_importance", 0.5)
 
         if not best_edge:
-            return {"best_bet": None}
+            return {"best_bet": None, "risk_narrative": "", "professional_verdict": "PASAR — No se detectaron value bets."}
 
         # Determine best bet
         bet_type = best_edge["bet_type"]
@@ -40,7 +62,7 @@ class RiskAgent(BaseAgent):
             team = team_away
             prob = model_probs.get("away_win", 0.3)
             odds = market_odds.get("away_win", 3.50)
-        else:  # Draw
+        else:
             bet_type = "Empate"
             team = "Empate"
             prob = model_probs.get("draw", 0.25)
@@ -49,12 +71,10 @@ class RiskAgent(BaseAgent):
         # Kelly Criterion
         kelly_stake = OddsService.kelly_criterion(prob, odds, fraction=0.25)
 
-        # Confidence score (0-10)
+        # Confidence score
         edge = best_edge["edge"]
         confidence_score = self._calculate_confidence(
-            edge=edge,
-            prob=prob,
-            match_importance=match_importance,
+            edge=edge, prob=prob, match_importance=match_importance,
             bookmaker_count=context.get("bookmaker_count", 0),
         )
 
@@ -72,58 +92,96 @@ class RiskAgent(BaseAgent):
             confidence = ConfidenceLevel.LOW
 
         recommendation = BetRecommendation(
-            bet_type=bet_type,
-            team=team,
-            probability=round(prob, 4),
-            market_odds=odds,
+            bet_type=bet_type, team=team,
+            probability=round(prob, 4), market_odds=odds,
             value_edge=round(edge, 4),
             recommended_stake_pct=round(kelly_stake * 100, 2),
-            confidence=confidence,
-            risk_level=risk_level,
+            confidence=confidence, risk_level=risk_level,
             confidence_score=round(confidence_score, 1),
+        )
+
+        # ── DeepSeek: professional risk assessment ──
+        llm_analysis = await self._assess_risk_with_llm(
+            context, recommendation, kelly_stake, edge, confidence_score
         )
 
         return {
             "best_bet": recommendation.model_dump(),
+            "risk_narrative": llm_analysis.get("risk_narrative", ""),
+            "stake_justification": llm_analysis.get("stake_justification", ""),
+            "key_risks": llm_analysis.get("key_risks", []),
+            "risk_mitigation": llm_analysis.get("risk_mitigation", ""),
+            "professional_verdict": llm_analysis.get("professional_verdict", ""),
+            "bankroll_advice": llm_analysis.get("bankroll_advice", ""),
         }
 
+    async def _assess_risk_with_llm(
+        self, context, recommendation, kelly_stake, edge, confidence_score
+    ) -> Dict:
+        home = context.get("team_home", "Home")
+        away = context.get("team_away", "Away")
+        rec = recommendation
+
+        prompt = (
+            f"Match: {home} vs {away}\n"
+            f"League: {context.get('league_name', 'Unknown')}\n\n"
+            f"--- Recommendation ---\n"
+            f"  Bet: {rec.bet_type} ({rec.team})\n"
+            f"  Model Probability: {rec.probability:.1%}\n"
+            f"  Market Odds: {rec.market_odds}\n"
+            f"  Value Edge: {rec.value_edge:+.1%}\n"
+            f"  Kelly Stake: {rec.recommended_stake_pct:.2f}% of bankroll\n"
+            f"  Confidence: {rec.confidence.value} ({confidence_score:.1f}/10)\n"
+            f"  Risk Level: {rec.risk_level.value}\n\n"
+            f"--- Key Context ---\n"
+            f"  Match Importance: {context.get('match_importance', 0.5):.2f}\n"
+            f"  Bookmaker Count: {context.get('bookmaker_count', 0)}\n"
+            f"  ELO Difference: {context.get('elo_difference', 0):+.1f}\n"
+            f"  Home Injuries: {context.get('home_injury_count', 0)}\n"
+            f"  Away Injuries: {context.get('away_injury_count', 0)}\n"
+            f"  Is Rivalry: {context.get('is_rivalry', False)}\n"
+            f"  API Advice: {context.get('api_advice', 'N/A')}\n"
+            f"  Model Agreement: {context.get('model_agreement', 'N/A')}\n"
+            f"  False Positive Risk: {context.get('false_positive_risk', 'N/A')}\n\n"
+            f"--- Simulation Data ---\n"
+            f"  MC: H={context.get('mc_home_win', 0):.1f}% D={context.get('mc_draw', 0):.1f}% A={context.get('mc_away_win', 0):.1f}%\n"
+            f"  Most Likely Score: {context.get('mc_most_likely_score', 'N/A')}\n"
+            f"  Upset Risk: {context.get('upset_risk', 'N/A')}"
+        )
+
+        llm = get_llm_router()
+        response = await llm.chat(system_prompt=RISK_SYSTEM_PROMPT, user_message=prompt, temperature=0.3)
+
+        try:
+            clean = response.strip()
+            if clean.startswith("```"):
+                clean = clean.split("\n", 1)[1].rsplit("```", 1)[0]
+            return json.loads(clean)
+        except (json.JSONDecodeError, IndexError):
+            self.logger.warning("Failed to parse risk LLM response")
+            return {}
+
     @staticmethod
-    def _calculate_confidence(
-        edge: float,
-        prob: float,
-        match_importance: float,
-        bookmaker_count: int,
-    ) -> float:
-        """Calculate confidence score on 0-10 scale."""
-        score = 5.0  # Base
-
-        # Edge contribution (+/- 2 points)
+    def _calculate_confidence(edge, prob, match_importance, bookmaker_count) -> float:
+        score = 5.0
         score += min(2.0, max(-2.0, edge * 20))
-
-        # Probability certainty (+/- 1.5 points)
         if prob > 0.6:
             score += 1.5
         elif prob > 0.5:
             score += 0.8
         elif prob < 0.3:
             score -= 0.5
-
-        # Match importance (+/- 0.5)
         score += (match_importance - 0.5) * 1.0
-
-        # Market data quality (+/- 1.0)
         if bookmaker_count >= 10:
             score += 1.0
         elif bookmaker_count >= 5:
             score += 0.5
         elif bookmaker_count == 0:
             score -= 1.0
-
         return max(0.0, min(10.0, score))
 
     @staticmethod
-    def _determine_risk_level(kelly_stake: float, edge: float) -> RiskLevel:
-        """Determine risk level based on stake and edge."""
+    def _determine_risk_level(kelly_stake, edge) -> RiskLevel:
         if kelly_stake <= 0.01 or edge <= 0:
             return RiskLevel.EXTREME
         elif kelly_stake <= 0.02 and edge < 0.05:

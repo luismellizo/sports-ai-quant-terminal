@@ -52,7 +52,7 @@ class LLMRouter:
         system_prompt: str,
         user_message: str,
         temperature: float = 0.3,
-        max_tokens: int = 2000,
+        max_tokens: int = 4000,
     ) -> str:
         """
         Send a chat completion request to the configured LLM.

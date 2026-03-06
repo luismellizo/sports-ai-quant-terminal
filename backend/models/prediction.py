@@ -95,6 +95,25 @@ class MonteCarloResult(BaseModel):
     score_distribution: List[ScoreProb] = []
 
 
+class TeamStatsSummary(BaseModel):
+    """Resumen numérico táctico de un equipo."""
+    wins_last_5: int = 0
+    draws_last_5: int = 0
+    losses_last_5: int = 0
+    goals_scored_last_5: int = 0
+    goals_conceded_last_5: int = 0
+
+
+class MatchInsights(BaseModel):
+    """Análisis cualitativo y contexto de alineaciones/historial."""
+    lineup_summary: str = ""
+    history_summary: str = ""
+    home_injury_count: int = 0
+    away_injury_count: int = 0
+    home_stats: TeamStatsSummary = TeamStatsSummary()
+    away_stats: TeamStatsSummary = TeamStatsSummary()
+
+
 class PredictionResult(BaseModel):
     """Complete prediction output from the pipeline."""
     id: str
@@ -120,6 +139,9 @@ class PredictionResult(BaseModel):
 
     # Final recommendation
     best_bet: Optional[BetRecommendation] = None
+    
+    # Textual Insights
+    insights: MatchInsights = MatchInsights()
 
     # Metadata
     total_execution_time_ms: float = 0

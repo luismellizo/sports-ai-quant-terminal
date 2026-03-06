@@ -25,7 +25,7 @@ class DeepSeekClient:
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
             },
-            timeout=60.0,
+            timeout=120.0,
         )
 
     async def chat(
@@ -33,7 +33,7 @@ class DeepSeekClient:
         messages: List[Dict[str, str]],
         model: str = "deepseek-chat",
         temperature: float = 0.3,
-        max_tokens: int = 2000,
+        max_tokens: int = 4000,
     ) -> str:
         """
         Send a chat completion request to DeepSeek.

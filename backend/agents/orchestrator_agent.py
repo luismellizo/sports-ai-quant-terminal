@@ -1,6 +1,6 @@
 """
 Sports AI — Orchestrator Agent
-Coordinates the full 13-agent pipeline with SSE event streaming.
+Coordinates the full 14-agent pipeline with SSE event streaming.
 """
 
 import time
@@ -22,6 +22,7 @@ from backend.agents.ml_agent import MLAgent
 from backend.agents.montecarlo_agent import MonteCarloAgent
 from backend.agents.market_edge_agent import MarketEdgeAgent
 from backend.agents.risk_agent import RiskAgent
+from backend.agents.synthesis_agent import SynthesisAgent
 from backend.models.prediction import (
     PredictionResult,
     ProbabilityDistribution,
@@ -36,34 +37,36 @@ logger = get_logger(__name__)
 # Agent pipeline in execution order
 PIPELINE: List[BaseAgent] = [
     NLPAgent(),           # 1. Parse input
-    ContextAgent(),       # 2. Match context
-    HistoryAgent(),       # 3. Historical data
-    LineupAgent(),        # 4. Lineup intelligence
-    SentimentAgent(),     # 5. News & sentiment
-    EloAgent(),           # 6. ELO ratings (needed by Odds & Features)
-    OddsAgent(),          # 7. Market odds (uses ELO for dynamic fallback)
+    ContextAgent(),       # 2. Match context + standings + team stats
+    HistoryAgent(),       # 3. Historical data + LLM narrative
+    LineupAgent(),        # 4. Lineup intelligence + tactical LLM
+    SentimentAgent(),     # 5. News & sentiment (LLM)
+    EloAgent(),           # 6. ELO ratings + LLM interpretation
+    OddsAgent(),          # 7. Market odds
     FeatureAgent(),       # 8. Feature engineering
-    PoissonAgent(),       # 9. Poisson model
-    MLAgent(),            # 10. ML ensemble
-    MonteCarloAgent(),    # 11. Monte Carlo sim
-    MarketEdgeAgent(),    # 12. Market inefficiency
-    RiskAgent(),          # 13. Risk management
+    PoissonAgent(),       # 9. Poisson model + LLM interpretation
+    MLAgent(),            # 10. API-Football predictions + LLM cross-validation
+    MonteCarloAgent(),    # 11. Monte Carlo sim + LLM interpretation
+    MarketEdgeAgent(),    # 12. Market inefficiency + LLM analysis
+    RiskAgent(),          # 13. Risk management + LLM recommendation
+    SynthesisAgent(),     # 14. Executive Summary (LLM brain)
 ]
 
 AGENT_LABELS = {
     "NLPAgent": "Analizando petición",
-    "ContextAgent": "Obteniendo contexto del partido",
-    "HistoryAgent": "Analizando datos históricos",
-    "LineupAgent": "Inteligencia de alineaciones",
+    "ContextAgent": "Obteniendo contexto competitivo (standings + stats)",
+    "HistoryAgent": "Analizando datos históricos con IA",
+    "LineupAgent": "Inteligencia táctica de alineaciones",
     "SentimentAgent": "Análisis de sentimiento y noticias",
+    "EloAgent": "Cálculo e interpretación de rating ELO",
     "OddsAgent": "Análisis de cuotas del mercado",
-    "EloAgent": "Cálculo de rating ELO",
     "FeatureAgent": "Ingeniería de características",
-    "PoissonAgent": "Modelo de goles de Poisson",
-    "MLAgent": "Predicción de Machine Learning (Ensemble)",
-    "MonteCarloAgent": "Simulación de Monte Carlo",
+    "PoissonAgent": "Modelo probabilístico de Poisson",
+    "MLAgent": "Cross-validación con predicciones de API-Football",
+    "MonteCarloAgent": "Simulación Monte Carlo (50K sims)",
     "MarketEdgeAgent": "Detección de ineficiencias del mercado",
-    "RiskAgent": "Evaluación de riesgo",
+    "RiskAgent": "Evaluación profesional de riesgo",
+    "SynthesisAgent": "Generando Executive Summary con IA",
 }
 
 
@@ -162,6 +165,54 @@ class OrchestratorAgent:
             "away_team": context.get("team_away", ""),
             "league": context.get("league_name", ""),
             "agents": agent_results,
+
+            # ── Executive Summary (from SynthesisAgent) ──
+            "executive_summary": context.get("executive_summary", ""),
+            "verdict": context.get("verdict", ""),
+            "tactical_synthesis": context.get("tactical_synthesis", ""),
+            "critical_data_points": context.get("critical_data_points", []),
+            "decisive_factors": context.get("decisive_factors", []),
+            "risk_warnings": context.get("risk_warnings", []),
+            "final_recommendation": context.get("final_recommendation", ""),
+            "conviction_level": context.get("conviction_level", ""),
+
+            # ── Agent Narratives ──
+            "insights": {
+                "context": context.get("context_narrative", ""),
+                "history": context.get("history_narrative", ""),
+                "lineup": context.get("lineup_narrative", ""),
+                "sentiment": context.get("sentiment_narrative", ""),
+                "elo": context.get("elo_narrative", ""),
+                "poisson": context.get("poisson_narrative", ""),
+                "ml": context.get("ml_narrative", ""),
+                "monte_carlo": context.get("mc_narrative", ""),
+                "market": context.get("market_narrative", ""),
+                "risk": context.get("risk_narrative", ""),
+                "professional_verdict": context.get("professional_verdict", ""),
+
+                # Legacy fields for frontend compatibility
+                "lineup_summary": context.get("lineup_narrative", ""),
+                "history_summary": context.get("history_narrative", ""),
+
+                "home_injury_count": context.get("home_injury_count", 0),
+                "away_injury_count": context.get("away_injury_count", 0),
+                "home_stats": {
+                    "wins_last_5": context.get("home_stats", {}).get("wins_last_5", 0),
+                    "draws_last_5": context.get("home_stats", {}).get("draws_last_5", 0),
+                    "losses_last_5": context.get("home_stats", {}).get("losses_last_5", 0),
+                    "goals_scored_last_5": context.get("home_stats", {}).get("goals_scored_last_5", 0),
+                    "goals_conceded_last_5": context.get("home_stats", {}).get("goals_conceded_last_5", 0),
+                },
+                "away_stats": {
+                    "wins_last_5": context.get("away_stats", {}).get("wins_last_5", 0),
+                    "draws_last_5": context.get("away_stats", {}).get("draws_last_5", 0),
+                    "losses_last_5": context.get("away_stats", {}).get("losses_last_5", 0),
+                    "goals_scored_last_5": context.get("away_stats", {}).get("goals_scored_last_5", 0),
+                    "goals_conceded_last_5": context.get("away_stats", {}).get("goals_conceded_last_5", 0),
+                },
+            },
+
+            # ── Detailed Agent Data ──
             "probabilities": {
                 "home_win": round(model_probs.get("home_win", 0.33) * 100, 1),
                 "draw": round(model_probs.get("draw", 0.33) * 100, 1),

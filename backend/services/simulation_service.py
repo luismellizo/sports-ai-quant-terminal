@@ -97,7 +97,16 @@ class SimulationService:
             total_goals = home_goals + away_goals
             goal_dist[str(g)] = round(np.sum(total_goals == g) / n, 4)
 
-        most_likely = sorted_scores[0][0] if sorted_scores else "1-0"
+        # Align most likely score with the overall match prediction to avoid UX confusion
+        # (e.g. Home has 55% win probability total, but 1-1 is the single most likely exact score)
+        if home_wins > draws and home_wins > away_wins:
+            aligned_scores = [s for s in sorted_scores if int(s[0].split("-")[0]) > int(s[0].split("-")[1])]
+        elif away_wins > draws and away_wins > home_wins:
+            aligned_scores = [s for s in sorted_scores if int(s[0].split("-")[0]) < int(s[0].split("-")[1])]
+        else:
+            aligned_scores = [s for s in sorted_scores if int(s[0].split("-")[0]) == int(s[0].split("-")[1])]
+            
+        most_likely = aligned_scores[0][0] if aligned_scores else (sorted_scores[0][0] if sorted_scores else "1-0")
 
         result = MonteCarloResult(
             simulations=n,
