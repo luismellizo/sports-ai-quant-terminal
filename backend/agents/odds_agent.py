@@ -21,16 +21,34 @@ class OddsAgent(BaseAgent):
         fixture_id = context.get("fixture_id")
 
         if not fixture_id:
-            self.logger.warning("No fixture ID — generating dynamic odds from context")
-            return self._dynamic_odds(context)
+            self.logger.warning("No fixture ID — cannot fetch API odds")
+            return {
+                "market_odds": {},
+                "implied_probabilities": {},
+                "odds_movement": {},
+                "overround": None,
+                "bookmaker_count": 0,
+                "odds_data_source": "missing",
+                "odds_data_available": False,
+                "odds_warning": "No fixture_id available for odds lookup.",
+            }
 
         # Fetch odds from API-Football
         raw_odds = await api.get_odds(fixture_id=fixture_id)
         market = self.odds_service.parse_api_odds(raw_odds)
 
         if not market:
-            self.logger.warning("No odds available — generating dynamic odds from context")
-            return self._dynamic_odds(context)
+            self.logger.warning("No API odds available for this fixture")
+            return {
+                "market_odds": {},
+                "implied_probabilities": {},
+                "odds_movement": {},
+                "overround": None,
+                "bookmaker_count": 0,
+                "odds_data_source": "missing",
+                "odds_data_available": False,
+                "odds_warning": "API returned no bookmaker odds for this fixture.",
+            }
 
         return {
             "market_odds": {
@@ -50,57 +68,6 @@ class OddsAgent(BaseAgent):
             },
             "overround": round(market.overround, 4),
             "bookmaker_count": len(market.bookmakers),
-        }
-
-    @staticmethod
-    def _dynamic_odds(context: Dict) -> Dict:
-        """Generate realistic odds from available context (ELO, form, stats)."""
-        # Use ELO expected probabilities if available
-        elo_home = context.get("elo_expected_home", 0.0)
-        elo_away = context.get("elo_expected_away", 0.0)
-
-        # Use home/away stats if available
-        home_stats = context.get("home_stats", {})
-        away_stats = context.get("away_stats", {})
-        home_form = home_stats.get("form_score", 50.0)
-        away_form = away_stats.get("form_score", 50.0)
-
-        if elo_home > 0 and elo_away > 0:
-            # Derive from ELO (most reliable)
-            home_prob = elo_home * 0.85 + 0.05  # Adjust slightly for home advantage
-            draw_prob = 0.22 + 0.05 * (1 - abs(elo_home - elo_away) * 2)
-            draw_prob = max(0.15, min(0.32, draw_prob))
-            away_prob = max(0.08, 1.0 - home_prob - draw_prob)
-            # Normalize
-            total = home_prob + draw_prob + away_prob
-            home_prob /= total
-            draw_prob /= total
-            away_prob /= total
-        else:
-            # Derive from form scores with home advantage
-            form_ratio = home_form / max(home_form + away_form, 1)
-            home_prob = form_ratio * 0.85 + 0.10  # Home advantage boost
-            draw_prob = 0.24
-            away_prob = max(0.10, 1.0 - home_prob - draw_prob)
-            total = home_prob + draw_prob + away_prob
-            home_prob /= total
-            draw_prob /= total
-            away_prob /= total
-
-        # Convert probabilities to decimal odds (with 5% overround)
-        overround = 1.05
-        home_odds = round(overround / max(home_prob, 0.05), 2)
-        draw_odds = round(overround / max(draw_prob, 0.05), 2)
-        away_odds = round(overround / max(away_prob, 0.05), 2)
-
-        return {
-            "market_odds": {"home_win": home_odds, "draw": draw_odds, "away_win": away_odds},
-            "implied_probabilities": {
-                "home": round(home_prob, 4),
-                "draw": round(draw_prob, 4),
-                "away": round(away_prob, 4),
-            },
-            "odds_movement": {"home": 0.0, "draw": 0.0, "away": 0.0},
-            "overround": 0.05,
-            "bookmaker_count": 0,
+            "odds_data_source": "api",
+            "odds_data_available": True,
         }

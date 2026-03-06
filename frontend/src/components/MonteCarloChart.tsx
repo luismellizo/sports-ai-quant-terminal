@@ -10,14 +10,8 @@ interface MonteCarloChartProps {
 }
 
 export default function MonteCarloChart({ data }: MonteCarloChartProps) {
-    // Goal distribution chart data
-    const goalData = Object.entries(data.goal_distribution).map(([goals, prob]) => ({
-        goals: `${goals}`,
-        probability: +(prob * 100).toFixed(2),
-    }));
-
     // Extract and format score distribution
-    let allScores = data.score_distribution.map(s => ({
+    const allScores = data.score_distribution.map(s => ({
         score: `${s.home_goals}-${s.away_goals}`,
         probability: +(s.probability * 100).toFixed(2),
     }));

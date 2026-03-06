@@ -39,6 +39,38 @@ class MarketEdgeAgent(BaseAgent):
         market_odds = context.get("market_odds", {})
         implied = context.get("implied_probabilities", {})
 
+        if not model_probs:
+            return {
+                "market_edges": [],
+                "value_bets": [],
+                "best_edge": None,
+                "model_probabilities": {},
+                "market_narrative": "No se pudo construir probabilidad consolidada por falta de datos de modelos.",
+                "value_bet_analysis": "No evaluable.",
+                "market_sentiment": "",
+                "false_positive_risk": "alto",
+                "recommended_bet_type": "ninguno",
+                "market_blind_spots": ["Insuficiencia de datos de modelos."],
+                "market_data_available": False,
+                "market_edge_status": "insufficient_model_data",
+            }
+
+        if context.get("odds_data_source") != "api" or not market_odds or not implied:
+            return {
+                "market_edges": [],
+                "value_bets": [],
+                "best_edge": None,
+                "model_probabilities": model_probs,
+                "market_narrative": "Sin cuotas reales de API no se puede calcular edge de mercado confiable.",
+                "value_bet_analysis": "No evaluable sin odds API.",
+                "market_sentiment": "",
+                "false_positive_risk": "alto",
+                "recommended_bet_type": "ninguno",
+                "market_blind_spots": ["Faltan cuotas 1X2 de Statpal."],
+                "market_data_available": False,
+                "market_edge_status": "missing_api_odds",
+            }
+
         edges = []
 
         home_edge = self._calculate_edge(
@@ -78,6 +110,8 @@ class MarketEdgeAgent(BaseAgent):
             "false_positive_risk": llm_analysis.get("false_positive_risk", ""),
             "recommended_bet_type": llm_analysis.get("recommended_bet_type", ""),
             "market_blind_spots": llm_analysis.get("market_blind_spots", []),
+            "market_data_available": True,
+            "market_edge_status": "ok",
         }
 
     async def _analyze_market_with_llm(
@@ -124,46 +158,79 @@ class MarketEdgeAgent(BaseAgent):
 
     def _aggregate_probabilities(self, context: Dict) -> Dict[str, float]:
         weights = {"poisson": 0.25, "ml": 0.35, "mc": 0.25, "elo": 0.15}
+        components = []
+        history_data_available = context.get("history_data_available", False)
 
-        home_prob = (
-            context.get("poisson_home_win", 0.4) * weights["poisson"]
-            + context.get("ml_home_win", 0.4) * weights["ml"]
-            + (context.get("mc_home_win", 40.0) / 100.0) * weights["mc"]
-            + context.get("elo_expected_home", 0.5) * weights["elo"]
-        )
-        draw_prob = (
-            context.get("poisson_draw", 0.25) * weights["poisson"]
-            + context.get("ml_draw", 0.3) * weights["ml"]
-            + (context.get("mc_draw", 25.0) / 100.0) * weights["mc"]
-            + 0.15 * weights["elo"]
-        )
-        away_prob = (
-            context.get("poisson_away_win", 0.35) * weights["poisson"]
-            + context.get("ml_away_win", 0.3) * weights["ml"]
-            + (context.get("mc_away_win", 35.0) / 100.0) * weights["mc"]
-            + context.get("elo_expected_away", 0.5) * weights["elo"]
-        )
+        if history_data_available and all(
+            key in context for key in ["poisson_home_win", "poisson_draw", "poisson_away_win"]
+        ):
+            components.append((
+                weights["poisson"],
+                context["poisson_home_win"],
+                context["poisson_draw"],
+                context["poisson_away_win"],
+            ))
+
+        ml_source = context.get("ml_data_source")
+        if all(key in context for key in ["ml_home_win", "ml_draw", "ml_away_win"]):
+            if ml_source == "api+poisson" or history_data_available:
+                components.append((
+                    weights["ml"],
+                    context["ml_home_win"],
+                    context["ml_draw"],
+                    context["ml_away_win"],
+                ))
+
+        if history_data_available and all(key in context for key in ["mc_home_win", "mc_draw", "mc_away_win"]):
+            components.append((
+                weights["mc"],
+                context["mc_home_win"] / 100.0,
+                context["mc_draw"] / 100.0,
+                context["mc_away_win"] / 100.0,
+            ))
+
+        if history_data_available and "elo_expected_home" in context and "elo_expected_away" in context:
+            elo_home = context["elo_expected_home"]
+            elo_away = context["elo_expected_away"]
+            elo_draw = max(0.0, 1.0 - elo_home - elo_away)
+            elo_total = elo_home + elo_draw + elo_away
+            if elo_total > 0:
+                components.append((
+                    weights["elo"],
+                    elo_home / elo_total,
+                    elo_draw / elo_total,
+                    elo_away / elo_total,
+                ))
+
+        if not components:
+            return {}
+
+        total_weight = sum(c[0] for c in components)
+        home_prob = sum(c[0] * c[1] for c in components) / total_weight
+        draw_prob = sum(c[0] * c[2] for c in components) / total_weight
+        away_prob = sum(c[0] * c[3] for c in components) / total_weight
 
         total = home_prob + draw_prob + away_prob
-        if total > 0:
-            home_prob /= total
-            draw_prob /= total
-            away_prob /= total
+        if total <= 0:
+            return {}
 
         return {
-            "home_win": round(home_prob, 4),
-            "draw": round(draw_prob, 4),
-            "away_win": round(away_prob, 4),
+            "home_win": round(home_prob / total, 4),
+            "draw": round(draw_prob / total, 4),
+            "away_win": round(away_prob / total, 4),
         }
 
     @staticmethod
     def _calculate_edge(bet_type, model_prob, market_prob, market_odds) -> Dict:
-        edge = model_prob - market_prob
+        model_prob_f = float(model_prob)
+        market_prob_f = float(market_prob)
+        odds_f = float(market_odds) if market_odds is not None else 0.0
+        edge = model_prob_f - market_prob_f
         return {
             "bet_type": bet_type,
-            "model_probability": round(model_prob, 4),
-            "market_probability": round(market_prob, 4),
-            "edge": round(edge, 4),
-            "odds": market_odds,
-            "is_value_bet": edge > 0.05,
+            "model_probability": float(round(model_prob_f, 4)),
+            "market_probability": float(round(market_prob_f, 4)),
+            "edge": float(round(edge, 4)),
+            "odds": odds_f,
+            "is_value_bet": bool(edge > 0.05),
         }

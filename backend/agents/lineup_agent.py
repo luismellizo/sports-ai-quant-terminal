@@ -61,11 +61,15 @@ class LineupAgent(BaseAgent):
         home_injury_impact = self._calculate_injury_impact(injuries_home)
         away_injury_impact = self._calculate_injury_impact(injuries_away)
 
-        # ── DeepSeek: tactical analysis ──
-        llm_analysis = await self._analyze_lineups_with_llm(
-            context, home_lineup, away_lineup,
-            injuries_home, injuries_away
-        )
+        lineup_data_available = bool(lineups or injuries_home or injuries_away)
+
+        llm_analysis = {}
+        if lineup_data_available:
+            # ── DeepSeek: tactical analysis ──
+            llm_analysis = await self._analyze_lineups_with_llm(
+                context, home_lineup, away_lineup,
+                injuries_home, injuries_away
+            )
 
         return {
             "home_lineup": home_lineup,
@@ -83,6 +87,8 @@ class LineupAgent(BaseAgent):
             "key_absences_impact": llm_analysis.get("key_absences_impact", []),
             "tactical_advantage": llm_analysis.get("tactical_advantage", ""),
             "formation_matchup": llm_analysis.get("formation_matchup", ""),
+            "lineup_data_source": "api" if lineup_data_available else "missing",
+            "lineup_data_available": lineup_data_available,
         }
 
     async def _analyze_lineups_with_llm(

@@ -8,6 +8,7 @@ interface AgentTimelineProps {
 
 const AGENT_ICONS: Record<string, string> = {
     NLPAgent: '🧠',
+    FixtureResolverAgent: '🧭',
     ContextAgent: '🔍',
     HistoryAgent: '📊',
     LineupAgent: '👥',

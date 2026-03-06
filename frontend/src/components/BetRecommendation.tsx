@@ -44,10 +44,23 @@ export default function BetRecommendation({ bet }: BetRecommendationProps) {
                 }}>
                     {bet.confidence === 'VERY HIGH' ? 'MUY ALTA' :
                         bet.confidence === 'HIGH' ? 'ALTA' :
-                            bet.confidence === 'MEDIUM' ? 'MEDIA' : 'BAJA'}
+                        bet.confidence === 'MEDIUM' ? 'MEDIA' : 'BAJA'}
                 </span>
             </div>
             <div className="panel-body">
+                {bet.recommendation_style && (
+                    <div style={{
+                        marginBottom: '12px',
+                        textAlign: 'center',
+                        fontSize: '11px',
+                        letterSpacing: '1.4px',
+                        color: bet.recommendation_style === 'GANARLA' ? 'var(--accent-green)' : 'var(--accent-orange)',
+                        fontWeight: 700,
+                    }}>
+                        {bet.recommendation_style === 'GANARLA' ? 'PERFIL: PARA GANARLA' : 'PERFIL: PARA ARRIESGARSE'}
+                    </div>
+                )}
+
                 {/* Main recommendation */}
                 <div style={{
                     textAlign: 'center',

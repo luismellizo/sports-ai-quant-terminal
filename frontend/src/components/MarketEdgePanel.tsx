@@ -4,11 +4,9 @@ import { MarketEdge } from '@/types';
 
 interface MarketEdgePanelProps {
     edges: MarketEdge[];
-    homeTeam: string;
-    awayTeam: string;
 }
 
-export default function MarketEdgePanel({ edges, homeTeam, awayTeam }: MarketEdgePanelProps) {
+export default function MarketEdgePanel({ edges }: MarketEdgePanelProps) {
     if (edges.length === 0) return null;
 
     return (

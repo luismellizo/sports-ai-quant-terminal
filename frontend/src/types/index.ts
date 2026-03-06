@@ -44,6 +44,7 @@ export interface BetRecommendation {
     confidence: string;
     risk_level: string;
     confidence_score: number;
+    recommendation_style?: string;
 }
 
 export interface MonteCarloData {
@@ -75,6 +76,23 @@ export interface H2HData {
     away_wins: number;
 }
 
+export interface FixtureResolutionAlternative {
+    score: number;
+    home_team: string;
+    away_team: string;
+    fixture_id: number | null;
+    fixture_date: string | null;
+    league_name: string | null;
+}
+
+export interface FixtureResolution {
+    status: string;
+    confidence: number;
+    confirmation_message: string;
+    alternatives: FixtureResolutionAlternative[];
+    warnings: string[];
+}
+
 export interface PredictionResult {
     id: string;
     query: string;
@@ -92,6 +110,8 @@ export interface PredictionResult {
     h2h: H2HData;
     sentiment: SentimentData;
     insights: MatchInsights;
+    fixture_resolution?: FixtureResolution;
+    data_quality?: Record<string, string>;
     total_execution_time_ms: number;
 }
 
@@ -114,5 +134,5 @@ export interface TeamStatsSummary {
 
 export interface SSEEvent {
     event: 'pipeline_start' | 'agent_start' | 'agent_complete' | 'pipeline_complete';
-    data: any;
+    data: unknown;
 }

@@ -56,11 +56,13 @@ class PoissonAgent(BaseAgent):
         home_win_prob = sum(s.probability for s in score_matrix if s.home_goals > s.away_goals)
         draw_prob = sum(s.probability for s in score_matrix if s.home_goals == s.away_goals)
         away_win_prob = sum(s.probability for s in score_matrix if s.home_goals < s.away_goals)
+        over_25_prob = sum(s.probability for s in score_matrix if (s.home_goals + s.away_goals) > 2)
+        btts_prob = sum(s.probability for s in score_matrix if s.home_goals > 0 and s.away_goals > 0)
 
         # ── DeepSeek: probabilistic interpretation ──
         llm_analysis = await self._interpret_poisson_with_llm(
             context, lambda_home, lambda_away,
-            home_win_prob, draw_prob, away_win_prob, score_matrix[:10]
+            home_win_prob, draw_prob, away_win_prob, over_25_prob, btts_prob, score_matrix[:10]
         )
 
         return {
@@ -70,6 +72,8 @@ class PoissonAgent(BaseAgent):
             "poisson_draw": round(draw_prob, 4),
             "poisson_away_win": round(away_win_prob, 4),
             "score_matrix": [s.model_dump() for s in score_matrix[:20]],
+            "poisson_over_25": round(over_25_prob, 4),
+            "poisson_btts": round(btts_prob, 4),
             "poisson_narrative": llm_analysis.get("poisson_narrative", ""),
             "goals_expectation": llm_analysis.get("goals_expectation", ""),
             "most_likely_scenarios": llm_analysis.get("most_likely_scenarios", ""),
@@ -80,7 +84,7 @@ class PoissonAgent(BaseAgent):
 
     async def _interpret_poisson_with_llm(
         self, context, lambda_home, lambda_away,
-        home_win_prob, draw_prob, away_win_prob, top_scores
+        home_win_prob, draw_prob, away_win_prob, over_25_prob, btts_prob, top_scores
     ) -> Dict:
         home = context.get("team_home", "Home")
         away = context.get("team_away", "Away")
@@ -89,10 +93,6 @@ class PoissonAgent(BaseAgent):
             f"  {s.home_goals}-{s.away_goals}: {s.probability:.1%}"
             for s in top_scores
         ])
-
-        # Calculate over/under
-        ou_25_over = sum(s.probability for s in top_scores if (s.home_goals + s.away_goals) > 2)
-        btts = sum(s.probability for s in top_scores if s.home_goals > 0 and s.away_goals > 0)
 
         prompt = (
             f"Match: {home} vs {away}\n\n"
@@ -106,8 +106,8 @@ class PoissonAgent(BaseAgent):
             f"  {away} wins: {away_win_prob:.1%}\n\n"
             f"Top 10 Most Likely Scores:\n{scores_text}\n\n"
             f"Market-relevant:\n"
-            f"  Over 2.5 goals: ~{ou_25_over:.1%}\n"
-            f"  BTTS (Both Teams To Score): ~{btts:.1%}"
+            f"  Over 2.5 goals: ~{over_25_prob:.1%}\n"
+            f"  BTTS (Both Teams To Score): ~{btts_prob:.1%}"
         )
 
         llm = get_llm_router()

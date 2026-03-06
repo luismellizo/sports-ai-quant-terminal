@@ -44,8 +44,8 @@ class HistoryAgent(BaseAgent):
         away_id = context.get("away_team_id")
 
         if not home_id or not away_id:
-            self.logger.warning("Team IDs not found — using league-average fallback stats")
-            return self._default_stats(context)
+            self.logger.warning("Team IDs not found — cannot build API history stats")
+            return self._insufficient_data_stats("No se pudieron identificar ambos equipos en la API.")
 
         # Fetch data from API-Football
         home_last_20 = await api.get_fixtures(team_id=home_id, last=20)
@@ -53,8 +53,8 @@ class HistoryAgent(BaseAgent):
         h2h = await api.get_h2h(home_id, away_id, last=20)
 
         if not home_last_20 and not away_last_20:
-            self.logger.warning("No fixture data from API — using league-average fallback stats")
-            return self._default_stats(context)
+            self.logger.warning("No fixture data from API — history unavailable")
+            return self._insufficient_data_stats("No hay histórico reciente disponible desde la API.")
 
         # Process results
         home_results = self._parse_results(home_last_20, home_id)
@@ -101,6 +101,8 @@ class HistoryAgent(BaseAgent):
             "away_wins": h2h_away_wins,
         }
 
+        history_data_source = "api" if home_last_20 and away_last_20 else "partial_api"
+
         # ── DeepSeek: historical analysis ──
         llm_analysis = await self._analyze_history_with_llm(
             context, home_results, away_results, h2h_results,
@@ -121,6 +123,8 @@ class HistoryAgent(BaseAgent):
             "key_historical_patterns": llm_analysis.get("key_historical_patterns", []),
             "goals_trend": llm_analysis.get("goals_trend", ""),
             "upset_risk": llm_analysis.get("upset_risk", ""),
+            "history_data_source": history_data_source,
+            "history_data_available": True,
         }
 
     async def _analyze_history_with_llm(
@@ -188,25 +192,35 @@ class HistoryAgent(BaseAgent):
             return {}
 
     @staticmethod
-    def _default_stats(context: Dict) -> Dict:
-        """Return realistic league-average fallback stats when API data is unavailable."""
+    def _insufficient_data_stats(reason: str) -> Dict:
+        """Return a deterministic empty payload when API history is unavailable."""
+        neutral_stats = {
+            "form_score": 50.0,
+            "goal_average": 0.0,
+            "defense_rating": 50.0,
+            "attack_rating": 50.0,
+            "momentum": 0.0,
+            "wins_last_5": 0,
+            "draws_last_5": 0,
+            "losses_last_5": 0,
+            "goals_scored_last_5": 0,
+            "goals_conceded_last_5": 0,
+        }
         return {
-            "home_stats": {
-                "form_score": 55.0, "goal_average": 1.4, "defense_rating": 52.0,
-                "attack_rating": 56.0, "momentum": 0.1,
-                "wins_last_5": 2, "draws_last_5": 1, "losses_last_5": 2,
-                "goals_scored_last_5": 6, "goals_conceded_last_5": 5,
-            },
-            "away_stats": {
-                "form_score": 48.0, "goal_average": 1.1, "defense_rating": 47.0,
-                "attack_rating": 49.0, "momentum": -0.05,
-                "wins_last_5": 1, "draws_last_5": 2, "losses_last_5": 2,
-                "goals_scored_last_5": 4, "goals_conceded_last_5": 6,
-            },
+            "home_stats": neutral_stats,
+            "away_stats": neutral_stats.copy(),
             "home_results": [], "away_results": [], "h2h_results": [],
             "h2h_summary": {"total_matches": 0, "home_wins": 0, "draws": 0, "away_wins": 0},
-            "history_narrative": "", "home_form_analysis": "", "away_form_analysis": "",
-            "h2h_analysis": "", "key_historical_patterns": [], "goals_trend": "", "upset_risk": "",
+            "history_narrative": "Histórico no disponible: no se obtuvieron partidos desde la API.",
+            "home_form_analysis": "",
+            "away_form_analysis": "",
+            "h2h_analysis": "",
+            "key_historical_patterns": [],
+            "goals_trend": "",
+            "upset_risk": "",
+            "history_data_source": "missing",
+            "history_data_available": False,
+            "history_data_warning": reason,
         }
 
     @staticmethod

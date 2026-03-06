@@ -50,16 +50,18 @@ export default function Home() {
         for (const line of lines) {
           try {
             const eventData: SSEEvent = JSON.parse(line.slice(6));
+            const payload = eventData.data as Record<string, unknown>;
 
             switch (eventData.event) {
               case 'agent_start':
                 setAgents(prev => {
-                  const exists = prev.find(a => a.index === eventData.data.index);
+                  const index = Number(payload.index ?? -1);
+                  const exists = prev.find(a => a.index === index);
                   if (exists) return prev;
                   return [...prev, {
-                    index: eventData.data.index,
-                    name: eventData.data.name,
-                    label: eventData.data.label,
+                    index,
+                    name: String(payload.name ?? ''),
+                    label: String(payload.label ?? ''),
                     status: 'running',
                   }];
                 });
@@ -68,11 +70,11 @@ export default function Home() {
               case 'agent_complete':
                 setAgents(prev =>
                   prev.map(a =>
-                    a.index === eventData.data.index
+                    a.index === Number(payload.index ?? -1)
                       ? {
                         ...a,
-                        status: eventData.data.status as AgentEvent['status'],
-                        execution_time_ms: eventData.data.execution_time_ms,
+                        status: String(payload.status ?? 'error') as AgentEvent['status'],
+                        execution_time_ms: Number(payload.execution_time_ms ?? 0),
                       }
                       : a
                   )
@@ -80,7 +82,7 @@ export default function Home() {
                 break;
 
               case 'pipeline_complete':
-                setPrediction(eventData.data as PredictionResult);
+                setPrediction(payload as unknown as PredictionResult);
                 break;
             }
           } catch {
@@ -181,6 +183,48 @@ export default function Home() {
         </div>
       )}
 
+      {/* Fixture resolution status */}
+      {prediction?.fixture_resolution && (
+        <div
+          className="panel"
+          style={{
+            padding: '10px 12px',
+            borderColor:
+              prediction.fixture_resolution.status === 'resolved'
+                ? 'rgba(0, 255, 136, 0.35)'
+                : 'rgba(255, 140, 0, 0.4)',
+          }}
+        >
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', letterSpacing: '1px' }}>
+            RESOLUCIÓN DE FIXTURE
+            <span
+              style={{
+                marginLeft: '10px',
+                color:
+                  prediction.fixture_resolution.status === 'resolved'
+                    ? 'var(--accent-green)'
+                    : 'var(--accent-orange)',
+                fontWeight: 700,
+              }}
+            >
+              {prediction.fixture_resolution.status.toUpperCase()} · {(prediction.fixture_resolution.confidence * 100).toFixed(0)}%
+            </span>
+          </div>
+
+          {prediction.fixture_resolution.confirmation_message && (
+            <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-primary)' }}>
+              {prediction.fixture_resolution.confirmation_message}
+            </div>
+          )}
+
+          {prediction.fixture_resolution.warnings?.length > 0 && (
+            <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--accent-orange)' }}>
+              {prediction.fixture_resolution.warnings.join(' | ')}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Agent Timeline */}
       <AgentTimeline agents={agents} />
 
@@ -252,8 +296,6 @@ export default function Home() {
             {/* Market Edge */}
             <MarketEdgePanel
               edges={prediction.market_edges}
-              homeTeam={prediction.home_team}
-              awayTeam={prediction.away_team}
             />
 
             {/* ELO & H2H Stats */}

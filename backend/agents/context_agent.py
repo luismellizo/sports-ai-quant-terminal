@@ -19,7 +19,9 @@ def sanitize_team_name(name: str) -> str:
     nfkd = unicodedata.normalize("NFKD", name)
     ascii_only = "".join(c for c in nfkd if not unicodedata.combining(c))
     # Keep only alphanumeric and spaces
-    clean = re.sub(r"[^a-zA-Z0-9\s]", "", ascii_only)
+    # Replace punctuation with spaces to avoid collapsing words
+    # like "Saint-Germain" -> "SaintGermain".
+    clean = re.sub(r"[^a-zA-Z0-9\s]", " ", ascii_only)
     # Collapse multiple spaces
     return re.sub(r"\s+", " ", clean).strip()
 
@@ -71,31 +73,56 @@ class ContextAgent(BaseAgent):
 
         api = get_api_football_client()
 
-        # Search for teams (sanitize names for API-Football compatibility)
-        home_search = sanitize_team_name(context.get("team_home", ""))
-        away_search = sanitize_team_name(context.get("team_away", ""))
-        home_results = await api.search_teams(home_search)
-        away_results = await api.search_teams(away_search)
+        # Prefer deterministic resolver output if available.
+        home_team = context.get("home_team_data")
+        away_team = context.get("away_team_data")
+        home_id = context.get("home_team_id")
+        away_id = context.get("away_team_id")
+        fixture = context.get("fixture")
+        league_info = (fixture or {}).get("league", {}) if fixture else {}
 
-        home_team = home_results[0] if home_results else None
-        away_team = away_results[0] if away_results else None
+        # Fallback search if resolver did not provide complete data.
+        if not home_team or not away_team or not home_id or not away_id:
+            home_search = sanitize_team_name(context.get("team_home", ""))
+            away_search = sanitize_team_name(context.get("team_away", ""))
+            home_results = await api.search_teams(home_search)
+            away_results = await api.search_teams(away_search)
 
-        home_id = home_team["team"]["id"] if home_team else None
-        away_id = away_team["team"]["id"] if away_team else None
+            if not home_team:
+                home_team = self._pick_best_team_match(context.get("team_home", ""), home_results)
+            if not away_team:
+                away_team = self._pick_best_team_match(context.get("team_away", ""), away_results)
+            if not home_id:
+                home_id = home_team["team"]["id"] if home_team else None
+            if not away_id:
+                away_id = away_team["team"]["id"] if away_team else None
 
-        # Find fixture
-        fixture = None
-        league_info = {}
-        if home_id and away_id:
-            fixtures = await api.get_fixtures(team_id=home_id, next_n=10)
-            for f in fixtures:
-                away_check = f.get("teams", {}).get("away", {}).get("id")
-                if away_check == away_id:
-                    fixture = f
+        # Find fixture without assuming home/away order from prompt.
+        if home_id and away_id and not fixture:
+            fixtures = await api.get_fixtures(team_id=home_id, next_n=20)
+            for candidate in fixtures:
+                candidate_ids = {
+                    candidate.get("teams", {}).get("home", {}).get("id"),
+                    candidate.get("teams", {}).get("away", {}).get("id"),
+                }
+                if home_id in candidate_ids and away_id in candidate_ids:
+                    fixture = candidate
                     break
 
             if fixture:
                 league_info = fixture.get("league", {})
+
+        # Canonicalize IDs and team data to official fixture order if fixture exists.
+        if fixture:
+            fixture_home_id = fixture.get("teams", {}).get("home", {}).get("id")
+            fixture_away_id = fixture.get("teams", {}).get("away", {}).get("id")
+            if fixture_home_id and fixture_away_id:
+                home_id = fixture_home_id
+                away_id = fixture_away_id
+                if (home_team or {}).get("team", {}).get("id") != home_id:
+                    home_team = await api.get_team(home_id)
+                if (away_team or {}).get("team", {}).get("id") != away_id:
+                    away_team = await api.get_team(away_id)
 
         # Check rivalry
         team_pair = frozenset({team_home, team_away})
@@ -146,6 +173,21 @@ class ContextAgent(BaseAgent):
             league_info, is_rivalry, rivalry_name, round_name
         )
 
+        warnings = list(context.get("fixture_resolution_warnings", []))
+        if not home_id:
+            warnings.append("Equipo local no identificado en API.")
+        if not away_id:
+            warnings.append("Equipo visitante no identificado en API.")
+        if home_id and away_id and not fixture:
+            warnings.append("No se encontró fixture entre ambos equipos en próximos partidos.")
+
+        if fixture and league_id:
+            context_data_source = "api"
+        elif home_id and away_id:
+            context_data_source = "partial_api"
+        else:
+            context_data_source = "missing"
+
         return {
             "home_team_data": home_team,
             "away_team_data": away_team,
@@ -171,6 +213,12 @@ class ContextAgent(BaseAgent):
             "away_motivation": llm_analysis.get("away_motivation", ""),
             "key_context_factors": llm_analysis.get("key_context_factors", []),
             "tactical_context": llm_analysis.get("tactical_context", ""),
+            "context_data_source": context_data_source,
+            "context_data_warnings": warnings,
+            "fixture_resolution_status": context.get("fixture_resolution_status"),
+            "fixture_resolution_confidence": context.get("fixture_resolution_confidence"),
+            "fixture_resolution_confirmation_message": context.get("fixture_resolution_confirmation_message", ""),
+            "fixture_resolution_alternatives": context.get("fixture_resolution_alternatives", []),
         }
 
     async def _analyze_context_with_llm(
@@ -180,6 +228,9 @@ class ContextAgent(BaseAgent):
         """Use DeepSeek to generate deep contextual analysis."""
         home = context.get("team_home", "Unknown")
         away = context.get("team_away", "Unknown")
+
+        if not standings and not home_stats and not away_stats and not league_info:
+            return {}
 
         # Build rich prompt with real data
         prompt_parts = [f"Match: {home} vs {away}"]
@@ -281,3 +332,33 @@ class ContextAgent(BaseAgent):
                     elif tid == away_id:
                         result["away"] = {**team_standing, "total_teams": total_teams}
         return result
+
+    @staticmethod
+    def _pick_best_team_match(team_query: str, results: List[Dict]) -> Dict[str, Any]:
+        """Select the best API search hit for a team name to reduce mismatch errors."""
+        if not results:
+            return None
+
+        query = sanitize_team_name(team_query).lower()
+        if not query:
+            return results[0]
+
+        # 1) Exact name/code hit first.
+        for entry in results:
+            team = entry.get("team", {})
+            name = sanitize_team_name(team.get("name", "")).lower()
+            code = sanitize_team_name(team.get("code", "")).lower()
+            if name == query or (code and code == query):
+                return entry
+
+        # 2) Handle common abbreviation mismatch (Paris Saint-Germain -> PSG).
+        if "paris saint germain" in query:
+            for entry in results:
+                team = entry.get("team", {})
+                name = sanitize_team_name(team.get("name", "")).lower()
+                code = sanitize_team_name(team.get("code", "")).lower()
+                if name == "psg" or code == "psg":
+                    return entry
+
+        # 3) Trust API client ranking (already scored in search_teams).
+        return results[0]

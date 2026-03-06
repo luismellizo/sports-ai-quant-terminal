@@ -1,6 +1,6 @@
 """
 Sports AI — Agent 10: Machine Learning Agent
-Replaced synthetic ML with API-Football predictions + DeepSeek cross-validation analysis.
+Uses API-derived signals + DeepSeek cross-validation analysis.
 """
 
 import json
@@ -12,7 +12,7 @@ from backend.llm.llm_router import get_llm_router
 ML_SYSTEM_PROMPT = """Eres un analista cuantitativo de fútbol especializado en machine learning y modelos predictivos. Recibirás múltiples fuentes de predicción REALES para un partido.
 
 Tu trabajo es:
-1. Comparar las predicciones de la API de fútbol (su propio ML) con nuestro modelo Poisson
+1. Comparar las probabilidades de API/mercado con nuestro modelo Poisson
 2. Analizar discrepancias entre modelos y qué las causa
 3. Generar una predicción consensuada ponderando ambas fuentes
 4. Identificar áreas de alta certeza vs áreas de incertidumbre
@@ -25,20 +25,20 @@ Devuelve ÚNICAMENTE un objeto JSON:
   "consensus_draw": 0.0-1.0,
   "consensus_away_win": 0.0-1.0,
   "model_agreement": "alto/medio/bajo — con datos específicos",
-  "api_prediction_summary": "resumen de qué predice la API de fútbol",
+  "api_prediction_summary": "resumen de qué predice la API o proxy de mercado",
   "key_prediction_factors": ["factor1", "factor2", "factor3"],
   "confidence_in_prediction": "alta/media/baja — justificación"
 }"""
 
 
 class MLAgent(BaseAgent):
-    """Uses real API-Football predictions + cross-validation with DeepSeek."""
+    """Uses API signals + cross-validation with DeepSeek."""
 
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         api = get_api_football_client()
         fixture_id = context.get("fixture_id")
 
-        # Get API-Football's own ML predictions (REAL data, not synthetic)
+        # Try direct API prediction endpoint first (if provider supports it)
         api_prediction = None
         if fixture_id:
             api_prediction = await api.get_predictions(fixture_id)
@@ -57,13 +57,28 @@ class MLAgent(BaseAgent):
             # Extract percentage predictions
             percent = predictions.get("percent", {})
             api_probs = {
-                "home_win": int(percent.get("home", "0").replace("%", "")) / 100,
-                "draw": int(percent.get("draw", "0").replace("%", "")) / 100,
-                "away_win": int(percent.get("away", "0").replace("%", "")) / 100,
+                "home_win": self._parse_percent(percent.get("home")),
+                "draw": self._parse_percent(percent.get("draw")),
+                "away_win": self._parse_percent(percent.get("away")),
             }
 
             # Extract comparison data
             api_comparison = api_prediction.get("comparison", {})
+
+        # Statpal has no direct fixture prediction endpoint in Soccer V2.
+        # Fallback: use implied probabilities from real market odds as API signal.
+        if not api_probs:
+            implied = context.get("implied_probabilities", {})
+            home_implied = implied.get("home")
+            draw_implied = implied.get("draw")
+            away_implied = implied.get("away")
+            if all(v is not None for v in (home_implied, draw_implied, away_implied)):
+                api_probs = {
+                    "home_win": float(home_implied),
+                    "draw": float(draw_implied),
+                    "away_win": float(away_implied),
+                }
+                api_advice = "Proxy de mercado (probabilidades implícitas de Statpal 1X2)."
 
         # Get our Poisson predictions from context
         poisson_probs = {
@@ -83,7 +98,7 @@ class MLAgent(BaseAgent):
         ml_draw = llm_analysis.get("consensus_draw")
         ml_away = llm_analysis.get("consensus_away_win")
 
-        if not ml_home or not ml_draw or not ml_away:
+        if ml_home is None or ml_draw is None or ml_away is None:
             # Weighted average: 60% API, 40% Poisson (if API available)
             if api_probs:
                 ml_home = api_probs["home_win"] * 0.6 + poisson_probs["home_win"] * 0.4
@@ -94,11 +109,19 @@ class MLAgent(BaseAgent):
                 ml_draw = poisson_probs["draw"]
                 ml_away = poisson_probs["away_win"]
 
+        if api_prediction:
+            ml_data_source = "api+poisson"
+        elif api_probs:
+            ml_data_source = "odds_proxy+poisson"
+        else:
+            ml_data_source = "poisson_only"
+
         return {
             "ml_home_win": round(ml_home, 4),
             "ml_draw": round(ml_draw, 4),
             "ml_away_win": round(ml_away, 4),
             "api_prediction": api_probs,
+            "api_prediction_available": bool(api_probs),
             "api_advice": api_advice,
             "api_comparison": api_comparison,
             "api_winner": winner_data,
@@ -107,6 +130,7 @@ class MLAgent(BaseAgent):
             "api_prediction_summary": llm_analysis.get("api_prediction_summary", ""),
             "key_prediction_factors": llm_analysis.get("key_prediction_factors", []),
             "confidence_in_prediction": llm_analysis.get("confidence_in_prediction", ""),
+            "ml_data_source": ml_data_source,
         }
 
     async def _cross_validate_with_llm(
@@ -127,9 +151,9 @@ class MLAgent(BaseAgent):
         )
         prompt_parts.append(f"  xG: {context.get('expected_goals_home', 0):.2f} - {context.get('expected_goals_away', 0):.2f}")
 
-        # API-Football predictions
+        # API/market predictions
         if api_probs:
-            prompt_parts.append("\n--- API-Football ML Prediction ---")
+            prompt_parts.append("\n--- API/Market Prediction ---")
             prompt_parts.append(
                 f"  {home}: {api_probs.get('home_win', 0):.1%} | "
                 f"Draw: {api_probs.get('draw', 0):.1%} | "
@@ -152,7 +176,7 @@ class MLAgent(BaseAgent):
                             f"  {metric}: {home}={values.get('home', 'N/A')} vs {away}={values.get('away', 'N/A')}"
                         )
         else:
-            prompt_parts.append("\n[API-Football prediction not available for this fixture]")
+            prompt_parts.append("\n[No API prediction signal available for this fixture]")
 
         # Add ELO for context
         prompt_parts.append(f"\n--- ELO Context ---")
@@ -174,3 +198,14 @@ class MLAgent(BaseAgent):
         except (json.JSONDecodeError, IndexError):
             self.logger.warning("Failed to parse ML LLM response")
             return {}
+
+    @staticmethod
+    def _parse_percent(raw_value: Any) -> float:
+        """Parse percent values like '46%' into 0.46 with safe fallback."""
+        if raw_value is None:
+            return 0.0
+        clean = str(raw_value).replace("%", "").strip()
+        try:
+            return max(0.0, min(1.0, float(clean) / 100.0))
+        except ValueError:
+            return 0.0

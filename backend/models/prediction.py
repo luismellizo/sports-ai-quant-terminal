@@ -80,6 +80,7 @@ class BetRecommendation(BaseModel):
     confidence: ConfidenceLevel = ConfidenceLevel.MEDIUM
     risk_level: RiskLevel = RiskLevel.MEDIUM
     confidence_score: float = Field(0.0, ge=0, le=10)
+    recommendation_style: str = ""
 
 
 class MonteCarloResult(BaseModel):

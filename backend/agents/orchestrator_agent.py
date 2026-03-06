@@ -1,6 +1,6 @@
 """
 Sports AI — Orchestrator Agent
-Coordinates the full 14-agent pipeline with SSE event streaming.
+Coordinates the full 15-agent pipeline with SSE event streaming.
 """
 
 import time
@@ -10,6 +10,7 @@ import asyncio
 from typing import Dict, Any, AsyncGenerator, List
 from backend.agents.base_agent import BaseAgent
 from backend.agents.nlp_agent import NLPAgent
+from backend.agents.fixture_resolver_agent import FixtureResolverAgent
 from backend.agents.context_agent import ContextAgent
 from backend.agents.history_agent import HistoryAgent
 from backend.agents.lineup_agent import LineupAgent
@@ -37,23 +38,25 @@ logger = get_logger(__name__)
 # Agent pipeline in execution order
 PIPELINE: List[BaseAgent] = [
     NLPAgent(),           # 1. Parse input
-    ContextAgent(),       # 2. Match context + standings + team stats
-    HistoryAgent(),       # 3. Historical data + LLM narrative
-    LineupAgent(),        # 4. Lineup intelligence + tactical LLM
-    SentimentAgent(),     # 5. News & sentiment (LLM)
-    EloAgent(),           # 6. ELO ratings + LLM interpretation
-    OddsAgent(),          # 7. Market odds
-    FeatureAgent(),       # 8. Feature engineering
-    PoissonAgent(),       # 9. Poisson model + LLM interpretation
-    MLAgent(),            # 10. API-Football predictions + LLM cross-validation
-    MonteCarloAgent(),    # 11. Monte Carlo sim + LLM interpretation
-    MarketEdgeAgent(),    # 12. Market inefficiency + LLM analysis
-    RiskAgent(),          # 13. Risk management + LLM recommendation
-    SynthesisAgent(),     # 14. Executive Summary (LLM brain)
+    FixtureResolverAgent(),  # 2. Canonical fixture resolver (no home/away assumption)
+    ContextAgent(),          # 3. Match context + standings + team stats
+    HistoryAgent(),          # 4. Historical data + LLM narrative
+    LineupAgent(),           # 5. Lineup intelligence + tactical LLM
+    SentimentAgent(),        # 6. News & sentiment (LLM)
+    EloAgent(),              # 7. ELO ratings + LLM interpretation
+    OddsAgent(),             # 8. Market odds
+    FeatureAgent(),          # 9. Feature engineering
+    PoissonAgent(),          # 10. Poisson model + LLM interpretation
+    MLAgent(),               # 11. API predictions + LLM cross-validation
+    MonteCarloAgent(),       # 12. Monte Carlo sim + LLM interpretation
+    MarketEdgeAgent(),       # 13. Market inefficiency + LLM analysis
+    RiskAgent(),             # 14. Risk management + LLM recommendation
+    SynthesisAgent(),        # 15. Executive Summary (LLM brain)
 ]
 
 AGENT_LABELS = {
     "NLPAgent": "Analizando petición",
+    "FixtureResolverAgent": "Resolviendo fixture real (sin asumir local/visita)",
     "ContextAgent": "Obteniendo contexto competitivo (standings + stats)",
     "HistoryAgent": "Analizando datos históricos con IA",
     "LineupAgent": "Inteligencia táctica de alineaciones",
@@ -62,7 +65,7 @@ AGENT_LABELS = {
     "OddsAgent": "Análisis de cuotas del mercado",
     "FeatureAgent": "Ingeniería de características",
     "PoissonAgent": "Modelo probabilístico de Poisson",
-    "MLAgent": "Cross-validación con predicciones de API-Football",
+    "MLAgent": "Cross-validación con predicciones de API",
     "MonteCarloAgent": "Simulación Monte Carlo (50K sims)",
     "MarketEdgeAgent": "Detección de ineficiencias del mercado",
     "RiskAgent": "Evaluación profesional de riesgo",
@@ -214,9 +217,9 @@ class OrchestratorAgent:
 
             # ── Detailed Agent Data ──
             "probabilities": {
-                "home_win": round(model_probs.get("home_win", 0.33) * 100, 1),
-                "draw": round(model_probs.get("draw", 0.33) * 100, 1),
-                "away_win": round(model_probs.get("away_win", 0.33) * 100, 1),
+                "home_win": round(model_probs.get("home_win", 0.0) * 100, 1),
+                "draw": round(model_probs.get("draw", 0.0) * 100, 1),
+                "away_win": round(model_probs.get("away_win", 0.0) * 100, 1),
             },
             "expected_goals": {
                 "home": context.get("expected_goals_home", 0),
@@ -244,6 +247,22 @@ class OrchestratorAgent:
                 "home": context.get("sentiment_home", 0),
                 "away": context.get("sentiment_away", 0),
                 "narrative": context.get("sentiment_narrative", ""),
+            },
+            "fixture_resolution": {
+                "status": context.get("fixture_resolution_status", "unknown"),
+                "confidence": context.get("fixture_resolution_confidence", 0.0),
+                "confirmation_message": context.get("fixture_resolution_confirmation_message", ""),
+                "alternatives": context.get("fixture_resolution_alternatives", []),
+                "warnings": context.get("fixture_resolution_warnings", []),
+            },
+            "data_quality": {
+                "fixture_resolution": context.get("fixture_resolution_status", "missing"),
+                "context": context.get("context_data_source", "missing"),
+                "history": context.get("history_data_source", "missing"),
+                "lineup": context.get("lineup_data_source", "missing"),
+                "odds": context.get("odds_data_source", "missing"),
+                "ml": context.get("ml_data_source", "missing"),
+                "market_edge": context.get("market_edge_status", "missing"),
             },
             "total_execution_time_ms": round(total_time, 0),
         }

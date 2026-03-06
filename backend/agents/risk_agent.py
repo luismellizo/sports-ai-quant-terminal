@@ -39,16 +39,29 @@ class RiskAgent(BaseAgent):
     """Final agent: calculates stake, confidence, and risk with LLM narrative."""
 
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        model_probs = context.get("model_probabilities", {})
-        market_odds = context.get("market_odds", {})
-        edges = context.get("market_edges", [])
-        best_edge = context.get("best_edge")
+        model_probs = self._normalize_model_probabilities(context)
+        market_odds = context.get("market_odds", {}) or self._fallback_market_odds(model_probs)
+        edges = context.get("market_edges", []) or self._build_edges(model_probs, market_odds)
+        best_edge = context.get("best_edge") or (max(edges, key=lambda e: e.get("edge", -1.0)) if edges else None)
         team_home = context.get("team_home", "Home")
         team_away = context.get("team_away", "Away")
         match_importance = context.get("match_importance", 0.5)
 
-        if not best_edge:
-            return {"best_bet": None, "risk_narrative": "", "professional_verdict": "PASAR — No se detectaron value bets."}
+        if not model_probs:
+            return {
+                "best_bet": None,
+                "risk_narrative": "",
+                "professional_verdict": "PASAR — No hay probabilidades de modelo para recomendar una apuesta.",
+                "bet_profile": None,
+            }
+
+        if not best_edge or not edges:
+            return {
+                "best_bet": None,
+                "risk_narrative": "",
+                "professional_verdict": "PASAR — No se pudo construir un escenario de apuesta confiable.",
+                "bet_profile": None,
+            }
 
         # Determine best bet
         bet_type = best_edge["bet_type"]
@@ -70,9 +83,13 @@ class RiskAgent(BaseAgent):
 
         # Kelly Criterion
         kelly_stake = OddsService.kelly_criterion(prob, odds, fraction=0.25)
+        edge = best_edge.get("edge", 0.0)
+        if edge <= 0.05:
+            # Always provide an actionable recommendation profile.
+            # For low/no edge scenarios, keep exposure minimal.
+            kelly_stake = max(kelly_stake, 0.005)
 
         # Confidence score
-        edge = best_edge["edge"]
         confidence_score = self._calculate_confidence(
             edge=edge, prob=prob, match_importance=match_importance,
             bookmaker_count=context.get("bookmaker_count", 0),
@@ -91,6 +108,12 @@ class RiskAgent(BaseAgent):
         else:
             confidence = ConfidenceLevel.LOW
 
+        recommendation_style = self._classify_recommendation_style(
+            confidence_score=confidence_score,
+            probability=prob,
+            risk_level=risk_level,
+        )
+
         recommendation = BetRecommendation(
             bet_type=bet_type, team=team,
             probability=round(prob, 4), market_odds=odds,
@@ -98,6 +121,7 @@ class RiskAgent(BaseAgent):
             recommended_stake_pct=round(kelly_stake * 100, 2),
             confidence=confidence, risk_level=risk_level,
             confidence_score=round(confidence_score, 1),
+            recommendation_style=recommendation_style,
         )
 
         # ── DeepSeek: professional risk assessment ──
@@ -105,14 +129,22 @@ class RiskAgent(BaseAgent):
             context, recommendation, kelly_stake, edge, confidence_score
         )
 
+        professional_verdict = llm_analysis.get("professional_verdict", "")
+        if not professional_verdict:
+            if recommendation_style == "GANARLA":
+                professional_verdict = "APOSTAR — perfil de ejecución conservador para ganarla."
+            else:
+                professional_verdict = "APOSTAR — perfil agresivo: oportunidad para arriesgarse."
+
         return {
             "best_bet": recommendation.model_dump(),
             "risk_narrative": llm_analysis.get("risk_narrative", ""),
             "stake_justification": llm_analysis.get("stake_justification", ""),
             "key_risks": llm_analysis.get("key_risks", []),
             "risk_mitigation": llm_analysis.get("risk_mitigation", ""),
-            "professional_verdict": llm_analysis.get("professional_verdict", ""),
+            "professional_verdict": professional_verdict,
             "bankroll_advice": llm_analysis.get("bankroll_advice", ""),
+            "bet_profile": recommendation_style,
         }
 
     async def _assess_risk_with_llm(
@@ -190,3 +222,89 @@ class RiskAgent(BaseAgent):
             return RiskLevel.MEDIUM
         else:
             return RiskLevel.LOW
+
+    @staticmethod
+    def _classify_recommendation_style(
+        confidence_score: float,
+        probability: float,
+        risk_level: RiskLevel,
+    ) -> str:
+        """Classify recommendation into user-facing style: GANARLA or ARRIESGARSE."""
+        if confidence_score >= 7.0 and probability >= 0.50 and risk_level in (RiskLevel.LOW, RiskLevel.MEDIUM):
+            return "GANARLA"
+        return "ARRIESGARSE"
+
+    @staticmethod
+    def _normalize_model_probabilities(context: Dict[str, Any]) -> Dict[str, float]:
+        probs = context.get("model_probabilities", {}) or {}
+        home = probs.get("home_win")
+        draw = probs.get("draw")
+        away = probs.get("away_win")
+
+        if home is None or draw is None or away is None:
+            home = context.get("ml_home_win", context.get("poisson_home_win"))
+            draw = context.get("ml_draw", context.get("poisson_draw"))
+            away = context.get("ml_away_win", context.get("poisson_away_win"))
+
+        if home is None or draw is None or away is None:
+            return {}
+
+        total = float(home) + float(draw) + float(away)
+        if total <= 0:
+            return {}
+
+        return {
+            "home_win": float(home) / total,
+            "draw": float(draw) / total,
+            "away_win": float(away) / total,
+        }
+
+    @staticmethod
+    def _fallback_market_odds(model_probs: Dict[str, float]) -> Dict[str, float]:
+        if not model_probs:
+            return {}
+
+        def fair_odd(prob: float) -> float:
+            p = max(0.05, min(0.90, float(prob)))
+            return round(1.0 / p, 2)
+
+        return {
+            "home_win": fair_odd(model_probs.get("home_win", 0.33)),
+            "draw": fair_odd(model_probs.get("draw", 0.33)),
+            "away_win": fair_odd(model_probs.get("away_win", 0.33)),
+        }
+
+    @staticmethod
+    def _build_edges(model_probs: Dict[str, float], market_odds: Dict[str, float]) -> list[Dict[str, Any]]:
+        if not model_probs or not market_odds:
+            return []
+
+        def implied(odd: float) -> float:
+            if odd and odd > 1:
+                return 1.0 / odd
+            return 1.0
+
+        edges = []
+        pairs = [
+            ("Gana Local", "home_win", "home_win"),
+            ("Empate", "draw", "draw"),
+            ("Gana Visita", "away_win", "away_win"),
+        ]
+
+        for label, prob_key, odd_key in pairs:
+            prob = float(model_probs.get(prob_key, 0.0))
+            odd = float(market_odds.get(odd_key, 0.0))
+            market_prob = implied(odd)
+            edge = prob - market_prob
+            edges.append(
+                {
+                    "bet_type": label,
+                    "model_probability": round(prob, 4),
+                    "market_probability": round(market_prob, 4),
+                    "edge": round(edge, 4),
+                    "odds": odd,
+                    "is_value_bet": edge > 0.05,
+                }
+            )
+
+        return sorted(edges, key=lambda item: item["edge"], reverse=True)

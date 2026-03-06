@@ -32,7 +32,7 @@ class BaseAgent(ABC):
 
         try:
             data = await self.execute(context)
-            elapsed = (time.time() - start) * 1000
+            elapsed = max((time.time() - start) * 1000, 1.0)
 
             result = AgentResult(
                 agent_name=self.name,
@@ -44,7 +44,7 @@ class BaseAgent(ABC):
             return result
 
         except Exception as e:
-            elapsed = (time.time() - start) * 1000
+            elapsed = max((time.time() - start) * 1000, 1.0)
             self.logger.error(f"✗ {self.name} failed: {e}")
             return AgentResult(
                 agent_name=self.name,

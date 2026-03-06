@@ -10,12 +10,14 @@ import json
 
 SENTIMENT_SYSTEM_PROMPT = """Eres un agente de análisis de sentimiento deportivo. Dados dos equipos de fútbol que están por jugar un partido, estima el sentimiento y los factores de presión para cada equipo.
 
-Considera estos factores (incluso sin noticias en tiempo real, usa tu conocimiento general):
+Considera estos factores usando SOLO los datos que se te entregan en el prompt:
 - Moral actual del equipo e impulso de resultados recientes
 - Estabilidad del entrenador y cambios tácticos
 - Actividad en el mercado de fichajes y dinámica de jugadores
 - Presión de la afición y de los medios comunicacionales
 - Rendimiento histórico en situaciones similares
+
+Si faltan datos, reconoce la incertidumbre explícitamente y evita inventar hechos.
 
 Devuelve ÚNICAMENTE un objeto JSON:
 {
@@ -43,6 +45,18 @@ class SentimentAgent(BaseAgent):
         home_stats = context.get("home_stats", {})
         away_stats = context.get("away_stats", {})
 
+        if not context.get("history_data_available", False):
+            return {
+                "sentiment_home": 0.0,
+                "sentiment_away": 0.0,
+                "pressure_home": 0.5,
+                "pressure_away": 0.5,
+                "sentiment_factors_home": [],
+                "sentiment_factors_away": [],
+                "sentiment_narrative": "Sentiment analysis unavailable: insufficient historical API data.",
+                "sentiment_data_source": "missing",
+            }
+
         prompt = (
             f"Match: {team_home} vs {team_away}\n"
             f"League: {league}\n"
@@ -69,10 +83,10 @@ class SentimentAgent(BaseAgent):
             data = json.loads(clean)
         except (json.JSONDecodeError, IndexError):
             data = {
-                "home_sentiment": 0.1,
+                "home_sentiment": 0.0,
                 "away_sentiment": 0.0,
-                "home_pressure_index": 0.3,
-                "away_pressure_index": 0.3,
+                "home_pressure_index": 0.5,
+                "away_pressure_index": 0.5,
                 "key_factors_home": [],
                 "key_factors_away": [],
                 "narrative": "Sentiment analysis unavailable.",
@@ -81,9 +95,10 @@ class SentimentAgent(BaseAgent):
         return {
             "sentiment_home": data.get("home_sentiment", 0.0),
             "sentiment_away": data.get("away_sentiment", 0.0),
-            "pressure_home": data.get("home_pressure_index", 0.3),
-            "pressure_away": data.get("away_pressure_index", 0.3),
+            "pressure_home": data.get("home_pressure_index", 0.5),
+            "pressure_away": data.get("away_pressure_index", 0.5),
             "sentiment_factors_home": data.get("key_factors_home", []),
             "sentiment_factors_away": data.get("key_factors_away", []),
             "sentiment_narrative": data.get("narrative", ""),
+            "sentiment_data_source": "llm",
         }

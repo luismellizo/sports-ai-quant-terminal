@@ -12,7 +12,13 @@ import os
 class Settings(BaseSettings):
     """Application configuration loaded from environment variables."""
 
+    # ── Statpal Soccer API ───────────────────────────────────────
+    statpal_access_key: str = ""
+    statpal_base_url: str = "https://statpal.io/api/v2"
+    statpal_sport: str = "soccer"
+
     # ── API-Football ──────────────────────────────────────────────
+    # Legacy fallback keys kept for backward compatibility.
     api_football_key: str = ""
     api_football_base_url: str = "https://v3.football.api-sports.io"
 
