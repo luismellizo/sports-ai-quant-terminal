@@ -90,15 +90,8 @@ export default function MatchInsightsPanel({ insights, homeTeam, awayTeam }: Mat
                             {insights.history_summary}
                         </div>
 
-                        <div style={{
-                            display: 'flex',
-                            gap: '12px',
-                            background: 'var(--bg-primary)',
-                            padding: '12px 12px',
-                            borderRadius: '4px',
-                            border: '1px solid var(--border-primary)'
-                        }}>
-                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        <div className="insight-form-grid">
+                            <div className="insight-form-team">
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{homeTeam}</span>
                                     <span style={{ fontSize: '13px', fontWeight: 700 }}>
@@ -115,8 +108,8 @@ export default function MatchInsightsPanel({ insights, homeTeam, awayTeam }: Mat
                                     losses={insights.home_stats.losses_last_5}
                                 />
                             </div>
-                            <div style={{ width: '1px', background: 'var(--border-primary)' }} />
-                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            <div className="insight-divider-vertical" />
+                            <div className="insight-form-team">
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{awayTeam}</span>
                                     <span style={{ fontSize: '13px', fontWeight: 700 }}>

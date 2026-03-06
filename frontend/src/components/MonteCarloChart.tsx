@@ -41,12 +41,7 @@ export default function MonteCarloChart({ data }: MonteCarloChartProps) {
             </div>
             <div className="panel-body">
                 {/* Summary stats */}
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(3, 1fr)',
-                    gap: '8px',
-                    marginBottom: '16px',
-                }}>
+                <div className="mc-summary-grid">
                     {[
                         { label: 'Gana Local', value: `${data.home_win_pct}%`, color: 'var(--accent-green)' },
                         { label: 'Empate', value: `${data.draw_pct}%`, color: 'var(--accent-cyan)' },
@@ -86,7 +81,7 @@ export default function MonteCarloChart({ data }: MonteCarloChartProps) {
 
                 {/* Score distribution chart */}
                 {scoreData.length > 0 && (
-                    <div style={{ height: '180px' }}>
+                    <div className="mc-chart-wrap">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={scoreData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1e2035" />

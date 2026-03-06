@@ -56,7 +56,7 @@ export default function TerminalInput({ onSubmit, isLoading }: TerminalInputProp
                     </span>
                 )}
             </div>
-            <div className="panel-body" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px' }}>
+            <div className="panel-body terminal-input-body">
                 <span style={{ color: 'var(--accent-green)', fontWeight: 700, fontSize: '16px' }}>{'>'}</span>
                 <input
                     ref={inputRef}
@@ -67,19 +67,12 @@ export default function TerminalInput({ onSubmit, isLoading }: TerminalInputProp
                     placeholder="analiza barcelona vs madrid"
                     spellCheck={false}
                     autoComplete="off"
-                    style={{
-                        flex: 1,
-                        background: 'transparent',
-                        border: 'none',
-                        outline: 'none',
-                        color: 'var(--text-primary)',
-                        fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: '16px',
-                        caretColor: 'var(--accent-green)',
-                    }}
+                    className="terminal-input-field"
                 />
                 {!isLoading && value && (
-                    <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>ENTER ↵</span>
+                    <span className="terminal-enter-hint" style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+                        ENTER ↵
+                    </span>
                 )}
             </div>
         </div>

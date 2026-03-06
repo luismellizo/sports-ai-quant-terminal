@@ -92,11 +92,7 @@ export default function BetRecommendation({ bet }: BetRecommendationProps) {
                 </div>
 
                 {/* Stats grid */}
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(2, 1fr)',
-                    gap: '8px',
-                }}>
+                <div className="bet-stats-grid">
                     {[
                         {
                             label: 'PROBABILIDAD',

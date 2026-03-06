@@ -39,17 +39,30 @@ export default function Home() {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let sseBuffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const text = decoder.decode(value, { stream: true });
-        const lines = text.split('\n').filter(l => l.startsWith('data: '));
+        sseBuffer += decoder.decode(value, { stream: true });
+        const rawEvents = sseBuffer.split('\n\n');
+        sseBuffer = rawEvents.pop() ?? '';
 
-        for (const line of lines) {
+        for (const rawEvent of rawEvents) {
+          const dataLines = rawEvent
+            .split('\n')
+            .filter(line => line.startsWith('data:'));
+          if (dataLines.length === 0) continue;
+
+          const eventJson = dataLines
+            .map(line => line.replace(/^data:\s?/, ''))
+            .join('\n')
+            .trim();
+          if (!eventJson) continue;
+
           try {
-            const eventData: SSEEvent = JSON.parse(line.slice(6));
+            const eventData: SSEEvent = JSON.parse(eventJson);
             const payload = eventData.data as Record<string, unknown>;
 
             switch (eventData.event) {
@@ -90,6 +103,28 @@ export default function Home() {
           }
         }
       }
+
+      // Parse any trailing buffered event (in case stream ends without final \n\n)
+      const trailing = sseBuffer.trim();
+      if (trailing.startsWith('data:')) {
+        const trailingJson = trailing
+          .split('\n')
+          .filter(line => line.startsWith('data:'))
+          .map(line => line.replace(/^data:\s?/, ''))
+          .join('\n')
+          .trim();
+
+        if (trailingJson) {
+          try {
+            const eventData: SSEEvent = JSON.parse(trailingJson);
+            if (eventData.event === 'pipeline_complete') {
+              setPrediction(eventData.data as PredictionResult);
+            }
+          } catch {
+            // Ignore malformed tail event
+          }
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Connection error');
     } finally {
@@ -98,26 +133,10 @@ export default function Home() {
   }, []);
 
   return (
-    <main style={{
-      minHeight: '100vh',
-      maxWidth: '1400px',
-      margin: '0 auto',
-      padding: '20px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '16px',
-      position: 'relative',
-      zIndex: 1,
-    }}>
+    <main className="page-main">
       {/* Header */}
-      <header style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '12px 16px',
-        borderBottom: '1px solid var(--border-primary)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <header className="app-header">
+        <div className="app-header-left">
           <span style={{
             color: 'var(--accent-green)',
             fontSize: '22px',
@@ -138,7 +157,7 @@ export default function Home() {
             QUANT TERMINAL v1.0
           </span>
         </div>
-        <div style={{ display: 'flex', gap: '16px', fontSize: '11px', color: 'var(--text-muted)' }}>
+        <div className="app-header-right">
           <span>
             <span style={{ color: 'var(--accent-green)' }}>●</span> SISTEMA EN LÍNEA
           </span>
@@ -168,12 +187,7 @@ export default function Home() {
 
       {/* Current query display */}
       {currentQuery && (
-        <div style={{
-          fontSize: '13px',
-          color: 'var(--text-muted)',
-          padding: '8px 14px',
-          borderLeft: '3px solid var(--accent-cyan)',
-        }}>
+        <div className="query-banner">
           ANALIZANDO: <span style={{ color: 'var(--accent-cyan)' }}>{currentQuery.toUpperCase()}</span>
           {prediction && (
             <span style={{ marginLeft: '12px', color: 'var(--text-muted)' }}>
@@ -230,11 +244,7 @@ export default function Home() {
 
       {/* Results Grid */}
       {prediction && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, 1fr)',
-          gap: '16px',
-        }}>
+        <div className="results-grid">
           {/* Left column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {/* Probability Bars */}
@@ -250,13 +260,7 @@ export default function Home() {
                 <span style={{ color: 'var(--accent-green)' }}>◆</span>
                 GOLES ESPERADOS (xG)
               </div>
-              <div className="panel-body" style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr auto 1fr',
-                gap: '12px',
-                alignItems: 'center',
-                textAlign: 'center',
-              }}>
+              <div className="panel-body xg-grid">
                 <div>
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.5px' }}>
                     {prediction.home_team.toUpperCase()}
@@ -270,7 +274,7 @@ export default function Home() {
                     {prediction.expected_goals.home}
                   </div>
                 </div>
-                <div style={{
+                <div className="xg-vs" style={{
                   fontSize: '20px',
                   color: 'var(--text-muted)',
                   fontWeight: 300,
@@ -305,12 +309,7 @@ export default function Home() {
                 RATING ELO & CARA A CARA (H2H)
               </div>
               <div className="panel-body">
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: '8px',
-                  marginBottom: '12px',
-                }}>
+                <div className="elo-grid">
                   <div style={{ textAlign: 'center', padding: '8px', background: 'var(--bg-primary)', borderRadius: '4px' }}>
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>ELO LOCAL</div>
                     <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--accent-green)' }}>
@@ -335,14 +334,7 @@ export default function Home() {
                   </div>
                 </div>
                 {prediction.h2h.total_matches > 0 && (
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-around',
-                    padding: '8px',
-                    background: 'var(--bg-primary)',
-                    borderRadius: '4px',
-                    fontSize: '13px',
-                  }}>
+                  <div className="h2h-strip">
                     <span>H2H: {prediction.h2h.total_matches} partidos</span>
                     <span style={{ color: 'var(--accent-green)' }}>G{prediction.h2h.home_wins}</span>
                     <span style={{ color: 'var(--text-muted)' }}>E{prediction.h2h.draws}</span>
@@ -387,12 +379,7 @@ export default function Home() {
                   ANÁLISIS DE SENTIMIENTO
                 </div>
                 <div className="panel-body">
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '8px',
-                    marginBottom: '8px',
-                  }}>
+                  <div className="sentiment-grid">
                     <div style={{ padding: '6px 8px', background: 'var(--bg-primary)', borderRadius: '4px', textAlign: 'center' }}>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>LOCAL</div>
                       <div style={{
@@ -449,12 +436,7 @@ export default function Home() {
           <div style={{ marginBottom: '24px' }}>
             Escribe un partido para analizar. Ejemplos:
           </div>
-          <div style={{
-            display: 'flex',
-            gap: '12px',
-            justifyContent: 'center',
-            flexWrap: 'wrap',
-          }}>
+          <div className="example-buttons">
             {[
               'analiza barcelona vs madrid',
               'predice inter vs juventus',
@@ -463,17 +445,7 @@ export default function Home() {
               <button
                 key={example}
                 onClick={() => handleAnalyze(example)}
-                style={{
-                  padding: '8px 16px',
-                  background: 'var(--bg-panel)',
-                  border: '1px solid var(--border-primary)',
-                  borderRadius: '4px',
-                  color: 'var(--accent-cyan)',
-                  cursor: 'pointer',
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: '13px',
-                  transition: 'all 0.2s',
-                }}
+                className="example-button"
                 onMouseOver={e => {
                   (e.target as HTMLElement).style.borderColor = 'var(--accent-cyan)';
                   (e.target as HTMLElement).style.background = 'rgba(0, 212, 255, 0.05)';
@@ -491,15 +463,7 @@ export default function Home() {
       )}
 
       {/* Status bar */}
-      <footer style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        padding: '8px 12px',
-        borderTop: '1px solid var(--border-primary)',
-        fontSize: '11px',
-        color: 'var(--text-muted)',
-        marginTop: 'auto',
-      }}>
+      <footer className="status-footer">
         <span>SPORTS AI TERMINAL v1.0.0</span>
         <span>13 AGENTES | POISSON + ML + MONTE CARLO</span>
         <span>

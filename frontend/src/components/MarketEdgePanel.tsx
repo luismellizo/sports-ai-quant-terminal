@@ -24,34 +24,29 @@ export default function MarketEdgePanel({ edges }: MarketEdgePanelProps) {
                     return (
                         <div
                             key={i}
+                            className="market-edge-row"
                             style={{
-                                display: 'grid',
-                                gridTemplateColumns: '1fr 1fr 1fr 1fr',
-                                gap: '8px',
-                                alignItems: 'center',
-                                padding: '8px 10px',
                                 background: isValue ? 'rgba(0, 255, 136, 0.05)' : 'var(--bg-primary)',
                                 border: `1px solid ${isValue ? 'rgba(0, 255, 136, 0.2)' : 'var(--border-primary)'}`,
-                                borderRadius: '4px',
                             }}
                         >
                             <div>
                                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>TIPO</div>
                                 <div style={{ fontSize: '13px', fontWeight: 600 }}>{edge.bet_type}</div>
                             </div>
-                            <div style={{ textAlign: 'center' }}>
+                            <div className="market-edge-center">
                                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>MODELO</div>
                                 <div style={{ fontSize: '14px', color: 'var(--accent-cyan)' }}>
                                     {(edge.model_probability * 100).toFixed(1)}%
                                 </div>
                             </div>
-                            <div style={{ textAlign: 'center' }}>
+                            <div className="market-edge-center">
                                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>MERCADO</div>
                                 <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
                                     {(edge.market_probability * 100).toFixed(1)}%
                                 </div>
                             </div>
-                            <div style={{ textAlign: 'right' }}>
+                            <div className="market-edge-right">
                                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>VENTAJA (EDGE)</div>
                                 <div style={{
                                     fontSize: '16px',

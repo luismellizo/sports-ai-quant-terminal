@@ -48,6 +48,7 @@ class APIFootballClient:
         ("brazil", "serie a"),
         ("argentina", "liga profesional"),
         ("colombia", "primera a"),
+        ("colombia", "primera division"),
         ("mexico", "liga mx"),
         ("usa", "major league soccer"),
         ("usa", "mls"),
@@ -71,6 +72,14 @@ class APIFootballClient:
         {"newcastle united", "newcastle"},
     )
     TOKEN_STOPWORDS = {"fc", "cf", "sc", "ac", "as", "club", "de", "the", "cd", "sd"}
+    TOKEN_ALIASES = {
+        "deportivo": ("dep",),
+        "dep": ("deportivo",),
+        "atletico": ("atl",),
+        "atl": ("atletico",),
+        "independiente": ("ind",),
+        "ind": ("independiente",),
+    }
 
     def __init__(self):
         base_url = API_BASE if API_BASE.endswith("/") else f"{API_BASE}/"
@@ -110,7 +119,7 @@ class APIFootballClient:
 
     # ── Team Search ───────────────────────────────────────────────
 
-    @cached("team_search_v2", ttl=86400)
+    @cached("team_search_v3", ttl=86400)
     async def search_teams(self, name: str) -> List[Dict]:
         """Search teams by name using recent Statpal schedules."""
         query = self._normalize_lookup_text(name)
@@ -664,7 +673,7 @@ class APIFootballClient:
         leagues = (data.get("leagues") or {}).get("league")
         return self._ensure_list(leagues)
 
-    @cached("statpal_reference_teams", ttl=43200)
+    @cached("statpal_reference_teams_v2", ttl=43200)
     async def _get_reference_team_candidates(self) -> List[Dict[str, Any]]:
         leagues = await self._get_league_catalog()
         selected = self._select_priority_leagues(leagues)
@@ -1353,6 +1362,20 @@ class APIFootballClient:
         compact = " ".join(token for token in tokens if token not in self.TOKEN_STOPWORDS)
         if compact:
             variants.add(compact)
+
+        for idx, token in enumerate(tokens):
+            for alias in self.TOKEN_ALIASES.get(token, ()):
+                alt = list(tokens)
+                alt[idx] = alias
+                alt_name = " ".join(alt).strip()
+                if alt_name:
+                    variants.add(alt_name)
+
+                alt_compact = " ".join(
+                    piece for piece in alt if piece not in self.TOKEN_STOPWORDS
+                ).strip()
+                if alt_compact:
+                    variants.add(alt_compact)
 
         return {variant for variant in variants if variant}
 
