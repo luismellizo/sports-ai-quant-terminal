@@ -48,13 +48,13 @@ function TeamSearchInput({
     };
 
     return (
-        <div ref={wrapperRef} className="flex-1 relative w-full">
-            <div className="text-[11px] text-[var(--text-muted)] font-semibold mb-2 tracking-[1px] uppercase">
+        <div ref={wrapperRef} className="flex-1 relative w-full flex flex-col items-center">
+            <div style={{ fontFamily: 'var(--font-doto), monospace', fontSize: '18px', letterSpacing: '4px', color: 'var(--text-primary)', marginBottom: '20px', textTransform: 'uppercase', textAlign: 'center' }}>
                 {label}
             </div>
-            <div className="relative flex items-center">
+            <div className="relative flex items-center justify-center w-full max-w-[500px]">
                 {selectedTeam && selectedTeam.logo && (
-                    <img src={selectedTeam.logo} alt="Logo" className="absolute left-3 w-6 h-6 object-contain z-10" />
+                    <img src={selectedTeam.logo} alt="Logo" className="absolute left-4 w-8 h-8 object-contain z-10" />
                 )}
                 <input
                     type="text"
@@ -62,31 +62,32 @@ function TeamSearchInput({
                     onChange={handleChange}
                     onFocus={() => { if(query.length >= 3) setIsOpen(true) }}
                     disabled={disabled}
-                    placeholder={`Buscar ${label.toLowerCase()}...`}
-                    className={`w-full py-3 pr-4 bg-[rgba(10,10,15,0.5)] border border-[var(--border-primary)] rounded text-[var(--text-primary)] font-mono text-[15px] outline-none transition-all duration-200 focus:border-[var(--accent-cyan)] focus:shadow-[0_0_10px_rgba(0,212,255,0.1)] focus:bg-[rgba(10,10,15,0.8)] ${selectedTeam ? 'pl-11' : 'pl-[14px]'}`}
+                    placeholder={`> BUSCAR...`}
+                    className={`team-search-input ${selectedTeam ? 'has-selection' : ''}`}
+                    style={{ fontSize: '24px', padding: '20px 40px', color: 'var(--text-primary)', textAlign: 'center', backgroundColor: 'transparent' }}
                     autoComplete="off"
                     spellCheck="false"
                 />
                 {isLoading && (
                     <span 
-                       className="absolute right-3 w-3.5 h-3.5 border-2 border-[var(--border-primary)] rounded-full animate-spin" 
-                       style={{ borderTopColor: 'var(--accent-cyan)' }} 
+                       className="absolute right-4 w-5 h-5 border-2 border-[var(--border-primary)] rounded-full animate-spin" 
+                       style={{ borderTopColor: 'var(--accent-green)' }} 
                     />
                 )}
             </div>
             
             {isOpen && results.length > 0 && (
-                <ul className="absolute top-[calc(100%+4px)] left-0 w-full max-h-60 overflow-y-auto bg-[var(--bg-secondary)] border border-[var(--border-active)] rounded z-50 shadow-[0_8px_24px_rgba(0,0,0,0.6)]">
+                <ul className="absolute top-[calc(100%+4px)] left-[50%] translate-x-[-50%] w-full max-w-[500px] max-h-[300px] overflow-y-auto bg-[var(--bg-panel)] border border-[var(--border-active)] rounded-none z-50 shadow-[0_8px_24px_rgba(0,0,0,0.8)]">
                     {results.map((team) => (
                         <li 
                             key={team.id} 
                             onClick={() => handleSelect(team)}
-                            className="flex items-center gap-3 px-3.5 py-2.5 cursor-pointer border-b border-[var(--border-primary)] transition-colors hover:bg-[rgba(0,212,255,0.08)]"
+                            className="flex items-center gap-4 px-4 py-4 cursor-pointer border-b border-[var(--border-primary)] transition-colors hover:bg-[var(--text-primary)] hover:text-black group"
                         >
-                            {team.logo && <img src={team.logo} alt="" className="w-6 h-6 object-contain" />}
-                            <div className="flex flex-col">
-                                <span className="text-[var(--text-primary)] text-[13px] font-medium">{team.name}</span>
-                                <span className="text-[var(--text-muted)] text-[11px]">{team.country}</span>
+                            {team.logo && <img src={team.logo} alt="" className="w-10 h-10 object-contain" />}
+                            <div className="flex flex-col text-left">
+                                <span style={{ fontFamily: 'var(--font-space-mono), monospace', fontSize: '16px', fontWeight: 700 }} className="text-[var(--text-primary)] group-hover:text-black">{team.name}</span>
+                                <span style={{ fontFamily: 'var(--font-space-grotesk), sans-serif', fontSize: '14px' }} className="text-[var(--text-muted)] group-hover:text-black opacity-80">{team.country}</span>
                             </div>
                         </li>
                     ))}
@@ -109,51 +110,57 @@ export default function MatchupInput({ onSubmit, isLoading }: MatchupInputProps)
     const isReady = homeTeam.length > 0 && awayTeam.length > 0;
 
     return (
-        <div className="panel animate-fade-in-up border border-[var(--border-primary)] bg-[var(--bg-panel)] rounded-md">
-            <div className="panel-header">
-                <span className={`status-dot ${isLoading ? 'active' : 'pending'}`} />
-                SELECCIONA EL ENCUENTRO
-                {isLoading && (
-                    <span style={{ color: 'var(--accent-orange)', marginLeft: 'auto', fontSize: '11px' }}>
-                        ▌ PROCESANDO RED...
-                    </span>
-                )}
-            </div>
-            <div className="p-6">
-                <div className="flex flex-col md:flex-row items-center justify-center gap-5">
+        <div className="animate-fade-in-up flex flex-col items-center justify-center" style={{ padding: '60px 0 100px 0', borderBottom: '1px dashed var(--border-primary)', width: '100%' }}>
+            {isLoading && (
+                <div style={{ textAlign: 'center', marginBottom: '40px', color: 'var(--accent-green)', fontFamily: 'var(--font-space-mono), monospace', fontSize: '16px', letterSpacing: '4px' }}>
+                    <span className="status-dot active animate-blink mr-3" />
+                    INICIANDO ANÁLISIS RED NEURONAL...
+                </div>
+            )}
+            
+            <div className="flex flex-col md:flex-row items-start justify-center gap-12 w-full max-w-[1400px] mx-auto px-4 mt-8">
+                <div style={{ width: '100%', flex: 1, display: 'flex', justifyContent: 'center' }}>
                     <TeamSearchInput 
                         label="Equipo Local" 
                         onSelect={setHomeTeam}
                         disabled={isLoading}
                     />
-                    
-                    <div className="flex items-center justify-center mt-1 md:mt-4">
-                        <span className="text-2xl font-extrabold text-[var(--accent-green)] italic tracking-widest drop-shadow-[0_0_15px_rgba(0,255,136,0.5)]">
-                            VS
-                        </span>
-                    </div>
+                </div>
+                
+                <div className="matchup-vs flex items-center justify-center self-center" style={{ minWidth: '100px', padding: '0 20px', marginTop: '30px' }}>
+                    <span style={{ fontSize: '32px' }}>VS</span>
+                </div>
 
+                <div style={{ width: '100%', flex: 1, display: 'flex', justifyContent: 'center' }}>
                     <TeamSearchInput 
                         label="Equipo Visitante" 
                         onSelect={setAwayTeam}
                         disabled={isLoading}
                     />
                 </div>
+            </div>
 
-                <div className="mt-6 flex flex-col items-center gap-3 border-t border-dashed border-[var(--border-primary)] pt-5">
-                    <button 
-                        onClick={handleSubmit} 
-                        disabled={!isReady || isLoading}
-                        className={`bg-transparent text-[var(--text-muted)] border border-[var(--border-primary)] px-8 py-3 rounded text-sm font-bold tracking-wider transition-all duration-300 ${isReady ? 'text-[var(--bg-primary)] bg-[var(--accent-green)] border-[var(--accent-green)] shadow-[0_0_15px_rgba(0,255,136,0.3)] hover:-translate-y-px hover:shadow-[0_0_25px_rgba(0,255,136,0.6)] cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
-                    >
-                        {isLoading ? 'ANALIZANDO...' : 'INICIAR ANÁLISIS'}
-                    </button>
-                    {!isReady && !isLoading && (
-                        <span className="text-xs text-[var(--text-muted)]">
-                            Ingresa ambos equipos para habilitar el análisis
-                        </span>
-                    )}
-                </div>
+            <div className="flex flex-col items-center justify-center w-full" style={{ marginTop: '120px' }}>
+                <button 
+                    onClick={handleSubmit} 
+                    disabled={!isReady || isLoading}
+                    className={`matchup-submit-btn ${isReady && !isLoading ? 'ready' : ''}`}
+                    style={{ 
+                        padding: '28px 100px', 
+                        fontSize: '32px', 
+                        color: isReady ? 'var(--bg-primary)' : 'var(--text-primary)',
+                        borderColor: isReady ? 'transparent' : 'var(--text-primary)',
+                        maxWidth: '800px',
+                        width: '100%'
+                    }}
+                >
+                    {isLoading ? 'ANALIZANDO...' : '[ INICIAR ANÁLISIS ]'}
+                </button>
+                {!isReady && !isLoading && (
+                    <span style={{ fontFamily: 'var(--font-space-mono), monospace', color: 'var(--text-muted)', fontSize: '16px', letterSpacing: '3px', textAlign: 'center', marginTop: '24px' }}>
+                        INGRESA AMBOS EQUIPOS PARA HABILITAR EL ANÁLISIS
+                    </span>
+                )}
             </div>
         </div>
     );

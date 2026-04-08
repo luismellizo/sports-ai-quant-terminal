@@ -1,24 +1,24 @@
 @import "tailwindcss";
 
 :root {
-  /* Bloomberg Terminal Color Palette */
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #0f1019;
-  --bg-panel: #12131d;
-  --bg-panel-hover: #181a28;
-  --border-primary: #1e2035;
-  --border-active: #2a2d4a;
-  --text-primary: #e0e0ec;
-  --text-secondary: #8888a8;
-  --text-muted: #555570;
-  --accent-green: #00ff88;
-  --accent-cyan: #00d4ff;
+  /* Nothing OS / Neon Pattern */
+  --bg-primary: #000000;
+  --bg-secondary: #050505;
+  --bg-panel: #111111;
+  --bg-panel-hover: #1A1A1A;
+  --border-primary: #333333;
+  --border-active: #666666;
+  --text-primary: #FFFFFF;
+  --text-secondary: #999999;
+  --text-muted: #666666;
+  --accent-green: #39FF14;
+  --accent-cyan: #E8E8E8;
   --accent-orange: #ff8c00;
-  --accent-red: #ff3b5c;
+  --accent-red: #D71921;
   --accent-yellow: #ffd700;
-  --accent-purple: #b388ff;
-  --glow-green: rgba(0, 255, 136, 0.15);
-  --glow-cyan: rgba(0, 212, 255, 0.15);
+  --accent-purple: #B5B5B5;
+  --glow-green: rgba(57, 255, 20, 0.15);
+  --glow-cyan: rgba(232, 232, 232, 0.15);
   --glow-orange: rgba(255, 140, 0, 0.15);
 }
 
@@ -31,9 +31,11 @@
 html,
 body {
   height: 100%;
-  background: var(--bg-primary);
+  background-color: var(--bg-primary);
+  background-image: radial-gradient(circle, #222222 1.5px, transparent 1.5px);
+  background-size: 32px 32px;
   color: var(--text-primary);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-space-grotesk), sans-serif;
   font-size: 14px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -139,9 +141,10 @@ body {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-primary);
   font-size: 12px;
+  font-family: var(--font-space-mono), monospace;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 1.5px;
+  letter-spacing: 0.1em;
   color: var(--text-secondary);
   display: flex;
   align-items: center;
@@ -337,9 +340,9 @@ body {
   background: var(--bg-panel);
   border: 1px solid var(--border-primary);
   border-radius: 4px;
-  color: var(--accent-cyan);
+  color: var(--text-primary);
   cursor: pointer;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-space-mono), monospace;
   font-size: 13px;
   transition: all 0.2s;
 }
@@ -582,8 +585,10 @@ body {
 
 /* ─── Matchup Input (Dual Autocomplete) ──────────────────────────── */
 .matchup-panel {
-  border: 1px solid var(--border-primary);
-  background: var(--bg-panel);
+  border: none;
+  border-bottom: 1px solid var(--border-primary);
+  border-top: 1px solid var(--border-primary);
+  background: transparent;
 }
 
 .matchup-body {
@@ -627,25 +632,33 @@ body {
 
 .team-search-input {
   width: 100%;
-  padding: 12px 14px;
-  background: rgba(10, 10, 15, 0.5);
-  border: 1px solid var(--border-primary);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 15px;
+  padding: 10px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--border-active);
+  border-radius: 0;
+  color: var(--accent-green);
+  font-family: var(--font-space-mono), monospace;
+  font-size: 14px;
+  text-transform: uppercase;
   outline: none;
   transition: all 0.2s ease;
 }
 
+.team-search-input::placeholder {
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
 .team-search-input.has-selection {
-  padding-left: 44px;
+  padding-left: 36px;
+  color: var(--text-primary);
 }
 
 .team-search-input:focus {
-  border-color: var(--accent-cyan);
-  box-shadow: 0 0 10px rgba(0, 212, 255, 0.1);
-  background: rgba(10, 10, 15, 0.8);
+  border-bottom-color: var(--accent-green);
+  box-shadow: 0 4px 10px -4px var(--glow-green);
+  background: transparent;
 }
 
 .team-search-spinner {
@@ -722,12 +735,12 @@ body {
 }
 
 .matchup-vs span {
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 800;
-  color: var(--accent-green);
-  text-shadow: 0 0 15px rgba(0, 255, 136, 0.5);
-  letter-spacing: 2px;
-  font-style: italic;
+  font-family: var(--font-doto), monospace;
+  color: var(--text-primary);
+  letter-spacing: 4px;
+  font-style: normal;
 }
 
 .matchup-footer {
@@ -743,28 +756,32 @@ body {
 .matchup-submit-btn {
   background: transparent;
   color: var(--text-muted);
-  border: 1px solid var(--border-primary);
-  padding: 12px 32px;
-  border-radius: 4px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 14px;
+  border: 1px solid var(--border-active);
+  padding: 10px 24px;
+  border-radius: 0;
+  font-family: var(--font-doto), monospace;
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
   cursor: not-allowed;
   transition: all 0.3s;
 }
 
 .matchup-submit-btn.ready {
   color: var(--bg-primary);
-  background: var(--accent-green);
-  border-color: var(--accent-green);
+  background: var(--text-primary);
+  border-color: var(--text-primary);
   cursor: pointer;
-  box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
+  box-shadow: none;
 }
 
 .matchup-submit-btn.ready:hover:not(:disabled) {
-  box-shadow: 0 0 25px rgba(0, 255, 136, 0.6);
-  transform: translateY(-1px);
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  color: #000;
+  box-shadow: 0 0 20px var(--glow-green);
+  transform: none;
 }
 
 .matchup-submit-btn:disabled {

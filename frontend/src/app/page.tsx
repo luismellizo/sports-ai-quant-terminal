@@ -1,498 +1,407 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import MatchupInput from '@/components/MatchupInput';
-import AgentTimeline from '@/components/AgentTimeline';
-import ProbabilityBars from '@/components/ProbabilityBars';
-import ScoreMatrix from '@/components/ScoreMatrix';
-import MonteCarloChart from '@/components/MonteCarloChart';
-import MarketEdgePanel from '@/components/MarketEdgePanel';
-import BetRecommendation from '@/components/BetRecommendation';
-import MatchInsightsPanel from '@/components/MatchInsightsPanel';
-import { type AgentEvent, type PredictionResult, type SSEEvent } from '@/types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
-export default function Home() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [agents, setAgents] = useState<AgentEvent[]>([]);
-  const [prediction, setPrediction] = useState<PredictionResult | null>(null);
-  const [currentQuery, setCurrentQuery] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  // Secret admin access: triple-click on logo
+export default function LandingPage() {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'error' | 'success'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [hackLines, setHackLines] = useState<string[]>([]);
   const router = useRouter();
-  const clickCountRef = useRef(0);
-  const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleLogoClick = useCallback(() => {
-    clickCountRef.current += 1;
-    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
-    if (clickCountRef.current >= 3) {
-      clickCountRef.current = 0;
-      router.push('/admin');
-      return;
-    }
-    clickTimerRef.current = setTimeout(() => {
-      clickCountRef.current = 0;
-    }, 600);
-  }, [router]);
-
-  const handleAnalyze = useCallback(async (query: string) => {
-    setIsLoading(true);
-    setAgents([]);
-    setPrediction(null);
-    setError(null);
-    setCurrentQuery(query);
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatus('loading');
 
     try {
-      const response = await fetch(`${API_URL}/api/analyze`, {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ username, password })
       });
+      const data = await res.json();
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      if (!response.body) throw new Error('No response body');
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let sseBuffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        sseBuffer += decoder.decode(value, { stream: true });
-        const rawEvents = sseBuffer.split('\n\n');
-        sseBuffer = rawEvents.pop() ?? '';
-
-        for (const rawEvent of rawEvents) {
-          const dataLines = rawEvent
-            .split('\n')
-            .filter(line => line.startsWith('data:'));
-          if (dataLines.length === 0) continue;
-
-          const eventJson = dataLines
-            .map(line => line.replace(/^data:\s?/, ''))
-            .join('\n')
-            .trim();
-          if (!eventJson) continue;
-
-          try {
-            const eventData: SSEEvent = JSON.parse(eventJson);
-            const payload = eventData.data as Record<string, unknown>;
-
-            switch (eventData.event) {
-              case 'agent_start':
-                setAgents(prev => {
-                  const index = Number(payload.index ?? -1);
-                  const exists = prev.find(a => a.index === index);
-                  if (exists) return prev;
-                  return [...prev, {
-                    index,
-                    name: String(payload.name ?? ''),
-                    label: String(payload.label ?? ''),
-                    status: 'running',
-                  }];
-                });
-                break;
-
-              case 'agent_complete':
-                setAgents(prev =>
-                  prev.map(a =>
-                    a.index === Number(payload.index ?? -1)
-                      ? {
-                        ...a,
-                        status: String(payload.status ?? 'error') as AgentEvent['status'],
-                        execution_time_ms: Number(payload.execution_time_ms ?? 0),
-                      }
-                      : a
-                  )
-                );
-                break;
-
-              case 'pipeline_complete':
-                setPrediction(payload as unknown as PredictionResult);
-                break;
-            }
-          } catch {
-            // Skip malformed events
-          }
-        }
+      if (data.success) {
+        setStatus('success');
+      } else {
+        setStatus('error');
+        setErrorMessage(data.message);
       }
-
-      // Parse any trailing buffered event (in case stream ends without final \n\n)
-      const trailing = sseBuffer.trim();
-      if (trailing.startsWith('data:')) {
-        const trailingJson = trailing
-          .split('\n')
-          .filter(line => line.startsWith('data:'))
-          .map(line => line.replace(/^data:\s?/, ''))
-          .join('\n')
-          .trim();
-
-        if (trailingJson) {
-          try {
-            const eventData: SSEEvent = JSON.parse(trailingJson);
-            if (eventData.event === 'pipeline_complete') {
-              setPrediction(eventData.data as PredictionResult);
-            }
-          } catch {
-            // Ignore malformed tail event
-          }
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Connection error');
-    } finally {
-      setIsLoading(false);
+    } catch {
+      setStatus('error');
+      setErrorMessage('Error de conexión con la matriz.');
     }
-  }, []);
+  };
+
+  useEffect(() => {
+    if (status === 'success') {
+      const lines = [
+        "INICIALIZANDO BYPASS LOCAL...",
+        "AUTENTICACIÓN CONFIRMADA: ADMIN",
+        "DESENCRIPTANDO NÚCLEO DE LA IA...",
+        "CONECTANDO 15 AGENTES NEURONALES...",
+        "CARGANDO SIMULACIONES MONTE CARLO...",
+        "SINCRONIZANDO ANÁLISIS DE SENTIMIENTO...",
+        "DERRIBANDO FIREWALLS DE LAS CASAS DE APUESTAS...",
+        "ACCESO CONCEDIDO."
+      ];
+
+      let i = 0;
+      const interval = setInterval(() => {
+        if (i < lines.length) {
+          setHackLines(prev => [...prev, lines[i]]);
+          i++;
+        } else {
+          clearInterval(interval);
+          setTimeout(() => {
+            router.push('/terminal');
+          }, 1000); // 1s extra despues del acceso concedido
+        }
+      }, 500);
+
+      return () => clearInterval(interval);
+    }
+  }, [status, router]);
+
+  if (status === 'success') {
+    return (
+      <main className="landing-layout hacking-mode">
+        <div className="hack-screen">
+          <div className="hack-header">◆ SPORTS AI QUANT TERMINAL // BOOT SEQUENCE</div>
+          {hackLines.map((line, idx) => (
+            <div key={idx} className="hack-line">
+              <span className="hack-prefix">{'>'}</span> {line}
+            </div>
+          ))}
+          <div className="cursor-blink">█</div>
+        </div>
+        <style jsx>{`
+          .landing-layout {
+            position: relative;
+            min-height: 100vh;
+            background-color: #000000;
+            color: #E8E8E8;
+            font-family: var(--font-space-grotesk), sans-serif;
+            background-image: radial-gradient(circle, #333333 1px, transparent 1px);
+            background-size: 24px 24px;
+            display: flex;
+            flex-direction: column;
+            padding: 32px 48px;
+            overflow: hidden;
+          }
+          .hacking-mode {
+            justify-content: flex-end;
+            padding-bottom: 96px;
+          }
+          .hack-screen {
+            font-family: var(--font-space-mono), monospace;
+            color: #39FF14;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            text-shadow: 0 0 10px rgba(57, 255, 20, 0.4);
+          }
+          .hack-header {
+            color: #FFFFFF;
+            margin-bottom: 32px;
+            font-size: 14px;
+            letter-spacing: 0.08em;
+          }
+          .hack-line {
+            font-size: 16px;
+            letter-spacing: 0.05em;
+          }
+          .hack-prefix {
+            color: #666666;
+          }
+          .cursor-blink {
+            font-size: 16px;
+            animation: blink 1s step-end infinite;
+          }
+          @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+          }
+        `}</style>
+      </main>
+    );
+  }
 
   return (
-    <main className="page-main">
-      {/* Header */}
-      <header className="app-header">
-        <div className="app-header-left">
-          <span
-            onClick={handleLogoClick}
-            style={{
-              color: 'var(--accent-green)',
-              fontSize: '22px',
-              fontWeight: 700,
-              textShadow: '0 0 15px rgba(0, 255, 136, 0.4)',
-              letterSpacing: '3px',
-              userSelect: 'none',
-            }}
-          >
-            ◆ SPORTS AI
-          </span>
-          <span style={{
-            fontSize: '11px',
-            color: 'var(--text-muted)',
-            padding: '3px 10px',
-            border: '1px solid var(--border-primary)',
-            borderRadius: '3px',
-            letterSpacing: '1px',
-          }}>
-            QUANT TERMINAL v1.0
-          </span>
+    <main className="landing-layout">
+      <header className="header">
+        <div className="logo-section">
+          <div className="logo-symbol">◆</div>
+          <div className="logo-text">SPORTS-AI</div>
         </div>
-        <div className="app-header-right">
-          <span>
-            <span style={{ color: 'var(--accent-green)' }}>●</span> SISTEMA EN LÍNEA
-          </span>
-          <span>
-            {new Date().toLocaleTimeString('en-US', { hour12: false })}
-          </span>
-        </div>
+        <div className="header-meta">v3.0.0 / OFFLINE</div>
       </header>
 
-      {/* Matchup Input */}
-      <MatchupInput onSubmit={handleAnalyze} isLoading={isLoading} />
-
-      {/* Error */}
-      {error && (
-        <div className="panel" style={{
-          borderColor: 'var(--accent-red)',
-          padding: '12px',
-          color: 'var(--accent-red)',
-          fontSize: '12px',
-        }}>
-          ✗ ERROR: {error}
-          <span style={{ color: 'var(--text-muted)', marginLeft: '8px' }}>
-            — Asegúrate de que el backend esté corriendo en {API_URL}
-          </span>
-        </div>
-      )}
-
-      {/* Current query display */}
-      {currentQuery && (
-        <div className="query-banner">
-          ANALIZANDO: <span style={{ color: 'var(--accent-cyan)' }}>{currentQuery.toUpperCase()}</span>
-          {prediction && (
-            <span style={{ marginLeft: '12px', color: 'var(--text-muted)' }}>
-              — {prediction.total_execution_time_ms?.toFixed(0)}ms en total
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Fixture resolution status */}
-      {prediction?.fixture_resolution && (
-        <div
-          className="panel"
-          style={{
-            padding: '10px 12px',
-            borderColor:
-              prediction.fixture_resolution.status === 'resolved'
-                ? 'rgba(0, 255, 136, 0.35)'
-                : 'rgba(255, 140, 0, 0.4)',
-          }}
-        >
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', letterSpacing: '1px' }}>
-            RESOLUCIÓN DE FIXTURE
-            <span
-              style={{
-                marginLeft: '10px',
-                color:
-                  prediction.fixture_resolution.status === 'resolved'
-                    ? 'var(--accent-green)'
-                    : 'var(--accent-orange)',
-                fontWeight: 700,
-              }}
-            >
-              {prediction.fixture_resolution.status.toUpperCase()} · {(prediction.fixture_resolution.confidence * 100).toFixed(0)}%
-            </span>
-          </div>
-
-          {prediction.fixture_resolution.confirmation_message && (
-            <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-primary)' }}>
-              {prediction.fixture_resolution.confirmation_message}
+      <div className="content-grid">
+        <section className="hero-section">
+          <h1 className="hero-title">PRECISIÓN<br />CUÁNTICA.</h1>
+          <p className="hero-subtitle">
+            El poder de 15 agentes de Inteligencia Artificial trabajando en paralelo.
+            Modelos predictivos hiper-ajustados que devoran los mercados deportivos usando
+            simulación de Monte Carlo, análisis de sentimiento en tiempo real y valoración de ventaja.
+          </p>
+          <div className="stats-row">
+            <div className="stat-block">
+              <div className="stat-value">15</div>
+              <div className="stat-label">AGENTES NEURONALES</div>
             </div>
-          )}
-
-          {prediction.fixture_resolution.warnings?.length > 0 && (
-            <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--accent-orange)' }}>
-              {prediction.fixture_resolution.warnings.join(' | ')}
+            <div className="stat-block">
+              <div className="stat-value">X10</div>
+              <div className="stat-label">VENTAJA DEL MERCADO</div>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Agent Timeline */}
-      <AgentTimeline agents={agents} />
-
-      {/* Results Grid */}
-      {prediction && (
-        <div className="results-grid">
-          {/* Left column */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Probability Bars */}
-            <ProbabilityBars
-              probabilities={prediction.probabilities}
-              homeTeam={prediction.home_team}
-              awayTeam={prediction.away_team}
-            />
-
-            {/* Expected Goals */}
-            <div className="panel animate-fade-in-up">
-              <div className="panel-header">
-                <span style={{ color: 'var(--accent-green)' }}>◆</span>
-                GOLES ESPERADOS (xG)
-              </div>
-              <div className="panel-body xg-grid">
-                <div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.5px' }}>
-                    {prediction.home_team.toUpperCase()}
-                  </div>
-                  <div style={{
-                    fontSize: '36px',
-                    fontWeight: 700,
-                    color: 'var(--accent-green)',
-                    textShadow: '0 0 15px rgba(0, 255, 136, 0.3)',
-                  }}>
-                    {prediction.expected_goals.home}
-                  </div>
-                </div>
-                <div className="xg-vs" style={{
-                  fontSize: '20px',
-                  color: 'var(--text-muted)',
-                  fontWeight: 300,
-                }}>
-                  vs
-                </div>
-                <div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.5px' }}>
-                    {prediction.away_team.toUpperCase()}
-                  </div>
-                  <div style={{
-                    fontSize: '36px',
-                    fontWeight: 700,
-                    color: 'var(--accent-orange)',
-                    textShadow: '0 0 15px rgba(255, 140, 0, 0.3)',
-                  }}>
-                    {prediction.expected_goals.away}
-                  </div>
-                </div>
-              </div>
+            <div className="stat-block">
+              <div className="stat-value">10k+</div>
+              <div className="stat-label">SIMULACIONES</div>
             </div>
+          </div>
+        </section>
 
-            {/* Market Edge */}
-            <MarketEdgePanel
-              edges={prediction.market_edges}
-            />
-
-            {/* ELO & H2H Stats */}
-            <div className="panel animate-fade-in-up">
-              <div className="panel-header">
-                <span style={{ color: 'var(--accent-cyan)' }}>◆</span>
-                RATING ELO & CARA A CARA (H2H)
+        <section className="login-section">
+          <div className="login-card">
+            <h2 className="login-title">INICIAR CONEXIÓN</h2>
+            <form onSubmit={handleLogin} className="login-form">
+              <div className="input-group">
+                <label>IDENTIFICADOR</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  placeholder="admin"
+                  required
+                  autoComplete="off"
+                />
               </div>
-              <div className="panel-body">
-                <div className="elo-grid">
-                  <div style={{ textAlign: 'center', padding: '8px', background: 'var(--bg-primary)', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>ELO LOCAL</div>
-                    <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--accent-green)' }}>
-                      {prediction.elo.home}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'center', padding: '8px', background: 'var(--bg-primary)', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>DIF</div>
-                    <div style={{
-                      fontSize: '20px',
-                      fontWeight: 700,
-                      color: prediction.elo.difference > 0 ? 'var(--accent-green)' : 'var(--accent-red)',
-                    }}>
-                      {prediction.elo.difference > 0 ? '+' : ''}{prediction.elo.difference}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'center', padding: '8px', background: 'var(--bg-primary)', borderRadius: '4px' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>ELO VISITANTE</div>
-                    <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--accent-orange)' }}>
-                      {prediction.elo.away}
-                    </div>
-                  </div>
-                </div>
-                {prediction.h2h.total_matches > 0 && (
-                  <div className="h2h-strip">
-                    <span>H2H: {prediction.h2h.total_matches} partidos</span>
-                    <span style={{ color: 'var(--accent-green)' }}>G{prediction.h2h.home_wins}</span>
-                    <span style={{ color: 'var(--text-muted)' }}>E{prediction.h2h.draws}</span>
-                    <span style={{ color: 'var(--accent-orange)' }}>P{prediction.h2h.away_wins}</span>
-                  </div>
-                )}
+              <div className="input-group">
+                <label>CLAVE DE ACCESO</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                />
               </div>
-            </div>
 
-            {/* Tactical & Historical Insights */}
-            {prediction.insights && (
-              <MatchInsightsPanel
-                insights={prediction.insights}
-                homeTeam={prediction.home_team}
-                awayTeam={prediction.away_team}
-              />
-            )}
-          </div>
+              {status === 'error' && (
+                <div className="error-msg">× {errorMessage}</div>
+              )}
 
-          {/* Right column */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Bet Recommendation */}
-            {prediction.best_bet && (
-              <BetRecommendation bet={prediction.best_bet} />
-            )}
-
-            {/* Monte Carlo */}
-            <MonteCarloChart data={prediction.monte_carlo} />
-
-            {/* Score Matrix */}
-            <ScoreMatrix
-              scores={prediction.score_matrix}
-              homeTeam={prediction.home_team}
-              awayTeam={prediction.away_team}
-            />
-
-            {/* Sentiment */}
-            {prediction.sentiment.narrative && (
-              <div className="panel animate-fade-in-up">
-                <div className="panel-header">
-                  <span style={{ color: 'var(--accent-purple)' }}>◆</span>
-                  ANÁLISIS DE SENTIMIENTO
-                </div>
-                <div className="panel-body">
-                  <div className="sentiment-grid">
-                    <div style={{ padding: '6px 8px', background: 'var(--bg-primary)', borderRadius: '4px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>LOCAL</div>
-                      <div style={{
-                        fontWeight: 700,
-                        color: prediction.sentiment.home > 0 ? 'var(--accent-green)' : 'var(--accent-red)',
-                      }}>
-                        {prediction.sentiment.home > 0 ? '+' : ''}{prediction.sentiment.home}
-                      </div>
-                    </div>
-                    <div style={{ padding: '6px 8px', background: 'var(--bg-primary)', borderRadius: '4px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>VISITANTE</div>
-                      <div style={{
-                        fontWeight: 700,
-                        color: prediction.sentiment.away > 0 ? 'var(--accent-green)' : 'var(--accent-red)',
-                      }}>
-                        {prediction.sentiment.away > 0 ? '+' : ''}{prediction.sentiment.away}
-                      </div>
-                    </div>
-                  </div>
-                  <p style={{
-                    fontSize: '13px',
-                    color: 'var(--text-secondary)',
-                    lineHeight: '1.7',
-                    fontStyle: 'italic',
-                  }}>
-                    {prediction.sentiment.narrative}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Footer */}
-      {!prediction && !isLoading && (
-        <div style={{
-          textAlign: 'center',
-          padding: '48px 16px',
-          color: 'var(--text-muted)',
-          fontSize: '13px',
-        }}>
-          <div style={{
-            fontSize: '40px',
-            marginBottom: '16px',
-            color: 'var(--accent-green)',
-            textShadow: '0 0 30px rgba(0, 255, 136, 0.3)',
-          }}>
-            ◆
-          </div>
-          <div style={{ marginBottom: '8px', color: 'var(--text-secondary)' }}>
-            SPORTS AI — Análisis Predictivo Multi-Agente
-          </div>
-          <div style={{ marginBottom: '24px' }}>
-            Escribe un partido para analizar. Ejemplos:
-          </div>
-          <div className="example-buttons">
-            {[
-              'analiza barcelona vs madrid',
-              'predice inter vs juventus',
-              'mejor apuesta liverpool vs arsenal',
-            ].map(example => (
-              <button
-                key={example}
-                onClick={() => handleAnalyze(example)}
-                className="example-button"
-                onMouseOver={e => {
-                  (e.target as HTMLElement).style.borderColor = 'var(--accent-cyan)';
-                  (e.target as HTMLElement).style.background = 'rgba(0, 212, 255, 0.05)';
-                }}
-                onMouseOut={e => {
-                  (e.target as HTMLElement).style.borderColor = 'var(--border-primary)';
-                  (e.target as HTMLElement).style.background = 'var(--bg-panel)';
-                }}
-              >
-                {example}
+              <button type="submit" className="login-btn" disabled={status === 'loading'}>
+                {status === 'loading' ? '[ CONECTANDO... ]' : '[ INGRESAR AL NÚCLEO ]'}
               </button>
-            ))}
+            </form>
           </div>
-        </div>
-      )}
+        </section>
+      </div>
 
-      {/* Status bar */}
-      <footer className="status-footer">
-        <span>SPORTS AI TERMINAL v1.0.0</span>
-        <span>15 AGENTES | DAG PARALELO + MONTE CARLO + SÍNTESIS</span>
-        <span>
-          <span style={{ color: 'var(--accent-green)' }}>●</span> CONECTADO
-        </span>
-      </footer>
+      <style jsx>{`
+        .landing-layout {
+          position: relative;
+          min-height: 100vh;
+          background-color: #000000;
+          color: #E8E8E8;
+          font-family: var(--font-space-grotesk), sans-serif;
+          background-image: radial-gradient(circle, #333333 1.5px, transparent 1.5px);
+          background-size: 32px 32px;
+          display: flex;
+          flex-direction: column;
+          padding: 32px 48px;
+          overflow: hidden;
+        }
+
+        .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 96px;
+        }
+
+        .logo-section {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .logo-symbol {
+          color: #39FF14;
+          font-size: 32px;
+          line-height: 1;
+        }
+
+        .logo-text {
+          font-family: var(--font-space-mono), monospace;
+          font-weight: 700;
+          font-size: 18px;
+          letter-spacing: 0.1em;
+          color: #FFFFFF;
+        }
+
+        .header-meta {
+          font-family: var(--font-space-mono), monospace;
+          font-size: 12px;
+          color: #666666;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .content-grid {
+          display: grid;
+          grid-template-columns: 1fr 400px;
+          gap: 96px;
+          align-items: center;
+          flex: 1;
+        }
+
+        .hero-title {
+          font-family: var(--font-doto), monospace;
+          font-size: 120px;
+          line-height: 0.95;
+          letter-spacing: -0.03em;
+          color: #FFFFFF;
+          margin-bottom: 48px;
+          text-transform: uppercase;
+        }
+
+        .hero-subtitle {
+          font-size: 20px;
+          line-height: 1.5;
+          color: #999999;
+          max-width: 600px;
+          margin-bottom: 64px;
+        }
+
+        .stats-row {
+          display: flex;
+          gap: 64px;
+        }
+
+        .stat-block {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .stat-value {
+          font-family: var(--font-doto), monospace;
+          font-size: 72px;
+          color: #39FF14;
+          line-height: 1;
+        }
+
+        .stat-label {
+          font-family: var(--font-space-mono), monospace;
+          font-size: 14px;
+          color: #666666;
+          letter-spacing: 0.1em;
+        }
+
+        .login-section {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+        }
+
+        .login-card {
+          background-color: #111111;
+          border: 1px solid #333333;
+          padding: 48px;
+        }
+
+        .login-title {
+          font-family: var(--font-space-mono), monospace;
+          font-size: 14px;
+          color: #FFFFFF;
+          letter-spacing: 0.08em;
+          margin-bottom: 48px;
+        }
+
+        .login-form {
+          display: flex;
+          flex-direction: column;
+          gap: 32px;
+        }
+
+        .input-group {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .input-group label {
+          font-family: var(--font-space-mono), monospace;
+          font-size: 11px;
+          color: #999999;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .input-group input {
+          background: transparent;
+          border: 1px solid #333333;
+          padding: 20px;
+          color: #FFFFFF;
+          font-family: var(--font-space-mono), monospace;
+          font-size: 18px;
+          outline: none;
+          transition: border-color 0.2s;
+        }
+
+        .input-group input:focus {
+          border-color: #39FF14;
+        }
+
+        .login-btn {
+          background: #39FF14;
+          color: #000000;
+          border: none;
+          padding: 20px;
+          font-family: var(--font-space-mono), monospace;
+          font-size: 14px;
+          font-weight: 700;
+          letter-spacing: 0.1em;
+          cursor: pointer;
+          transition: background-color 0.2s, color 0.2s;
+          margin-top: 16px;
+        }
+
+        .login-btn:hover {
+          background: #FFFFFF;
+          color: #000000;
+        }
+        
+        .login-btn:disabled {
+          background: #333333;
+          color: #666666;
+          cursor: not-allowed;
+        }
+
+        .error-msg {
+          font-family: var(--font-space-mono), monospace;
+          font-size: 12px;
+          color: #D71921;
+          background: rgba(215, 25, 33, 0.1);
+          padding: 12px;
+          border: 1px solid rgba(215, 25, 33, 0.3);
+        }
+
+        @media (max-width: 1024px) {
+          .content-grid {
+            grid-template-columns: 1fr;
+            gap: 64px;
+          }
+          
+          .hero-title {
+            font-size: 80px;
+          }
+        }
+      `}</style>
     </main>
   );
 }

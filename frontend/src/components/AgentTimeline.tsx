@@ -42,15 +42,6 @@ const AGENT_DESCRIPTIONS: Record<string, string> = {
     SynthesisAgent: 'Executive Summary y recomendación',
 };
 
-const STATUS_COLORS: Record<string, string> = {
-    completed: 'var(--accent-green)',
-    running: 'var(--accent-cyan)',
-    pending: 'var(--text-muted)',
-    error: 'var(--accent-red)',
-    timeout: 'var(--accent-yellow)',
-    skipped: 'var(--text-muted)',
-};
-
 export default function AgentTimeline({ agents }: AgentTimelineProps) {
     if (agents.length === 0) return null;
 
@@ -60,170 +51,149 @@ export default function AgentTimeline({ agents }: AgentTimelineProps) {
     const isRunning = agents.some(a => a.status === 'running');
 
     return (
-        <div className="panel animate-fade-in-up">
+        <div className="animate-fade-in-up" style={{ 
+            border: '1px solid var(--border-active)', 
+            padding: '24px', 
+            background: 'var(--bg-primary)',
+            marginBottom: '32px'
+        }}>
             {/* Header with progress */}
-            <div className="panel-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className={`status-dot ${isRunning ? 'active' : completed === total ? 'active' : 'pending'}`} />
-                    <span style={{ fontSize: '12px', letterSpacing: '1.5px' }}>
-                        RED DE AGENTES
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div className={isRunning ? 'animate-blink' : ''} style={{ 
+                        width: '12px', height: '12px', 
+                        background: isRunning ? 'var(--text-primary)' : completed === total ? 'var(--accent-green)' : 'var(--border-primary)'
+                    }} />
+                    <span style={{ fontFamily: 'var(--font-doto), monospace', fontSize: '16px', letterSpacing: '4px', textTransform: 'uppercase', color: 'var(--text-primary)' }}>
+                        RED_DE_AGENTES.exe
                     </span>
                     <span style={{
                         marginLeft: 'auto',
-                        color: isRunning ? 'var(--accent-cyan)' : 'var(--accent-green)',
-                        fontSize: '12px',
+                        color: isRunning ? 'var(--text-primary)' : 'var(--accent-green)',
+                        fontFamily: 'var(--font-space-mono), monospace',
+                        fontSize: '14px',
                         fontWeight: 700,
+                        letterSpacing: '2px'
                     }}>
                         {completed}/{total > 0 ? total : 15}
-                        <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: '6px', fontSize: '10px' }}>
-                            {isRunning ? 'PROCESANDO...' : completed === total ? 'COMPLETO' : ''}
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: '12px', fontSize: '12px' }}>
+                            {isRunning ? '[ PROCESANDO ]' : completed === total ? '[ COMPLETO ]' : ''}
                         </span>
                     </span>
                 </div>
                 {/* Progress bar */}
                 <div style={{
                     width: '100%',
-                    height: '3px',
-                    background: 'var(--bg-primary)',
-                    borderRadius: '2px',
-                    overflow: 'hidden',
+                    height: '2px',
+                    background: 'var(--border-primary)',
                 }}>
                     <div style={{
                         width: `${progress}%`,
                         height: '100%',
-                        background: isRunning
-                            ? 'linear-gradient(90deg, var(--accent-cyan), var(--accent-green))'
-                            : 'var(--accent-green)',
-                        borderRadius: '2px',
-                        transition: 'width 0.5s ease-out',
-                        boxShadow: isRunning ? '0 0 8px var(--accent-cyan)' : 'none',
+                        background: isRunning ? 'var(--text-primary)' : 'var(--accent-green)',
+                        transition: 'width 0.2s ease-out',
                     }} />
                 </div>
             </div>
 
             {/* Agent Grid */}
-            <div className="panel-body" style={{ padding: '16px', overflow: 'visible' }}>
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-                    gap: '8px',
-                    overflow: 'visible',
-                }}>
-                    {agents.map((agent, i) => {
-                        const icon = AGENT_ICONS[agent.name] || '◆';
-                        const isActive = agent.status === 'running';
-                        const isDone = agent.status === 'completed';
-                        const isErr = agent.status === 'error' || agent.status === 'timeout';
-                        const description = AGENT_DESCRIPTIONS[agent.name];
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                gap: '16px',
+            }}>
+                {agents.map((agent, i) => {
+                    const icon = AGENT_ICONS[agent.name] || '◆';
+                    const isActive = agent.status === 'running';
+                    const isDone = agent.status === 'completed';
+                    const isErr = agent.status === 'error' || agent.status === 'timeout';
+                    const description = AGENT_DESCRIPTIONS[agent.name];
 
-                        return (
+                    return (
+                        <div
+                            key={i}
+                            className="animate-fade-in-up agent-card-wrapper"
+                            style={{
+                                position: 'relative',
+                                animationDelay: `${i * 30}ms`,
+                            }}
+                        >
+                            {/* Tooltip */}
+                            {description && (
+                                <div className="agent-tooltip" style={{ borderRadius: '0', border: '1px solid var(--text-primary)', fontFamily: 'var(--font-space-mono)', fontSize: '12px' }}>
+                                    {description}
+                                    <div className="agent-tooltip-arrow" style={{ display: 'none' }} />
+                                </div>
+                            )}
+
+                            {/* Card */}
                             <div
-                                key={i}
-                                className="animate-fade-in-up agent-card-wrapper"
                                 style={{
-                                    position: 'relative',
-                                    animationDelay: `${i * 60}ms`,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    padding: '16px',
+                                    background: isActive 
+                                        ? 'var(--text-primary)' 
+                                        : 'transparent',
+                                    border: `1px solid ${isActive 
+                                        ? 'var(--text-primary)' 
+                                        : isDone 
+                                            ? 'var(--accent-green)' 
+                                            : isErr 
+                                                ? 'var(--accent-red)' 
+                                                : 'var(--border-primary)'}`,
+                                    transition: 'all 0.1s ease',
+                                    cursor: 'default',
+                                    minHeight: '110px'
                                 }}
                             >
-                                {/* Tooltip */}
-                                {description && (
-                                    <div className="agent-tooltip">
-                                        {description}
-                                        <div className="agent-tooltip-arrow" />
-                                    </div>
-                                )}
-
-                                {/* Card */}
-                                <div
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '10px',
-                                        padding: '10px 12px',
-                                        borderRadius: '6px',
-                                        background: isActive
-                                            ? 'rgba(0, 212, 255, 0.08)'
-                                            : isDone
-                                                ? 'rgba(0, 255, 136, 0.04)'
-                                                : 'var(--bg-primary)',
-                                        border: `1px solid ${isActive
-                                            ? 'rgba(0, 212, 255, 0.3)'
-                                            : isDone
-                                                ? 'rgba(0, 255, 136, 0.15)'
-                                                : isErr
-                                                    ? 'rgba(255, 59, 92, 0.3)'
-                                                    : 'var(--border-primary)'}`,
-                                        transition: 'all 0.3s ease',
-                                        position: 'relative',
-                                        overflow: 'hidden',
-                                        cursor: 'default',
-                                    }}
-                                >
-                                    {/* Pulse animation for running agent */}
-                                    {isActive && (
-                                        <div style={{
-                                            position: 'absolute',
-                                            inset: 0,
-                                            background: 'linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.05), transparent)',
-                                            animation: 'shimmer 1.5s infinite',
-                                        }} />
-                                    )}
-
-                                    {/* Agent icon */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                                     <span style={{
-                                        fontSize: '18px',
-                                        filter: isDone ? 'none' : isActive ? 'none' : 'grayscale(1) opacity(0.4)',
-                                        transition: 'filter 0.3s',
+                                        fontSize: '20px',
+                                        filter: isActive ? 'brightness(0)' : !isDone ? 'grayscale(1) opacity(0.3)' : 'none',
                                     }}>
                                         {icon}
                                     </span>
+                                    {isActive && (
+                                        <div className="animate-blink" style={{ width: '8px', height: '14px', background: '#000000' }} />
+                                    )}
+                                    {isDone && (
+                                        <div style={{ width: '8px', height: '14px', background: 'var(--accent-green)' }} />
+                                    )}
+                                </div>
 
-                                    {/* Agent info */}
-                                    <div style={{ flex: 1, minWidth: 0, position: 'relative', zIndex: 1 }}>
-                                        <div style={{
-                                            fontSize: '11px',
-                                            fontWeight: 600,
-                                            color: STATUS_COLORS[agent.status],
-                                            wordBreak: 'break-word',
-                                            lineHeight: '1.4',
-                                        }}>
-                                            {agent.label}
-                                        </div>
-                                        <div style={{
-                                            fontSize: '10px',
-                                            color: 'var(--text-muted)',
-                                            marginTop: '2px',
-                                        }}>
-                                            {isActive && '⟳ ejecutando...'}
-                                            {isDone && `✓ ${agent.execution_time_ms?.toFixed(0)}ms`}
-                                            {agent.status === 'timeout' && '⏱ timeout'}
-                                            {agent.status === 'error' && '✗ error'}
-                                            {agent.status === 'skipped' && '↷ omitido'}
-                                            {agent.status === 'pending' && '○ en espera'}
-                                        </div>
-                                    </div>
-
-                                    {/* Status indicator */}
+                                <div style={{ flex: 1 }}>
                                     <div style={{
-                                        width: '8px',
-                                        height: '8px',
-                                        borderRadius: '50%',
-                                        background: STATUS_COLORS[agent.status],
-                                        boxShadow: isActive
-                                            ? `0 0 8px ${STATUS_COLORS[agent.status]}`
-                                            : isDone
-                                                ? `0 0 4px ${STATUS_COLORS[agent.status]}`
-                                                : 'none',
-                                        animation: isActive ? 'pulse-glow 1.5s ease-in-out infinite' : 'none',
-                                        flexShrink: 0,
-                                        position: 'relative',
-                                        zIndex: 1,
-                                    }} />
+                                        fontSize: '12px',
+                                        fontWeight: 700,
+                                        color: isActive ? '#000000' : isDone ? 'var(--accent-green)' : 'var(--text-muted)',
+                                        fontFamily: 'var(--font-space-mono), monospace',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '1px',
+                                        lineHeight: '1.4',
+                                        marginBottom: '8px'
+                                    }}>
+                                        {agent.label}
+                                    </div>
+                                </div>
+
+                                <div style={{
+                                    fontSize: '11px',
+                                    fontFamily: 'var(--font-doto), monospace',
+                                    color: isActive ? 'rgba(0,0,0,0.6)' : isDone ? 'var(--accent-green)' : 'var(--text-muted)',
+                                    textTransform: 'uppercase',
+                                }}>
+                                    {isActive && '> ejecutando...'}
+                                    {isDone && `[ OK ] ${agent.execution_time_ms?.toFixed(0)}ms`}
+                                    {agent.status === 'timeout' && '[ WARN ] timeout'}
+                                    {agent.status === 'error' && '[ FAIL ] error'}
+                                    {agent.status === 'pending' && '- espera -'}
+                                    {agent.status === 'skipped' && '> omitido'}
                                 </div>
                             </div>
-                        );
-                    })}
-                </div>
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
