@@ -15,6 +15,15 @@ settings = get_settings()
 class JSONFormatter(logging.Formatter):
     """JSON log formatter for production environments."""
 
+    EXTRA_FIELDS = (
+        "prediction_id",
+        "stage",
+        "agent",
+        "duration_ms",
+        "status",
+        "error_code",
+    )
+
     def format(self, record: logging.LogRecord) -> str:
         log_data = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -23,6 +32,9 @@ class JSONFormatter(logging.Formatter):
             "function": record.funcName,
             "message": record.getMessage(),
         }
+        for field in self.EXTRA_FIELDS:
+            if field in record.__dict__ and record.__dict__[field] is not None:
+                log_data[field] = record.__dict__[field]
         if record.exc_info and record.exc_info[0]:
             log_data["exception"] = self.formatException(record.exc_info)
         return json.dumps(log_data)

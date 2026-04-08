@@ -4,7 +4,7 @@ Persists every prediction for the admin dashboard.
 """
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, DateTime, JSON, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, JSON, Text, BigInteger
 from backend.config.database import Base
 
 
@@ -15,7 +15,7 @@ class PredictionRecord(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     prediction_id = Column(String(16), unique=True, nullable=False, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
 
     # Match info
     query = Column(Text, nullable=False)
@@ -32,7 +32,7 @@ class PredictionRecord(Base):
 
     # Metadata
     total_execution_time_ms = Column(Float, default=0)
-    fixture_id = Column(Integer, nullable=True)
+    fixture_id = Column(BigInteger, nullable=True)
 
     # Result (filled when admin clicks "Llamar Resultado")
     result_data = Column(JSON, nullable=True)

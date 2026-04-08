@@ -4,7 +4,7 @@ export interface AgentEvent {
     index: number;
     name: string;
     label: string;
-    status: 'pending' | 'running' | 'completed' | 'error';
+    status: 'pending' | 'running' | 'completed' | 'error' | 'timeout' | 'skipped';
     execution_time_ms?: number;
 }
 
@@ -99,6 +99,7 @@ export interface PredictionResult {
     home_team: string;
     away_team: string;
     league: string;
+    fixture_id?: number | null;
     agents: AgentEvent[];
     probabilities: ProbabilityDistribution;
     expected_goals: ExpectedGoals;
@@ -112,6 +113,13 @@ export interface PredictionResult {
     insights: MatchInsights;
     fixture_resolution?: FixtureResolution;
     data_quality?: Record<string, string>;
+    timings?: {
+        total_ms: number;
+        by_agent: Record<string, number>;
+        by_stage: Record<string, number>;
+        timestamp: string;
+    };
+    errors?: Record<string, string>;
     total_execution_time_ms: number;
 }
 
@@ -133,6 +141,6 @@ export interface TeamStatsSummary {
 }
 
 export interface SSEEvent {
-    event: 'pipeline_start' | 'agent_start' | 'agent_complete' | 'pipeline_complete';
+    event: 'pipeline_start' | 'stage_start' | 'stage_complete' | 'agent_start' | 'agent_complete' | 'error' | 'pipeline_complete';
     data: unknown;
 }

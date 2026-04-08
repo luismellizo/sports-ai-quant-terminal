@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import TerminalInput from '@/components/TerminalInput';
+import MatchupInput from '@/components/MatchupInput';
 import AgentTimeline from '@/components/AgentTimeline';
 import ProbabilityBars from '@/components/ProbabilityBars';
 import ScoreMatrix from '@/components/ScoreMatrix';
@@ -190,8 +190,8 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Terminal Input */}
-      <TerminalInput onSubmit={handleAnalyze} isLoading={isLoading} />
+      {/* Matchup Input */}
+      <MatchupInput onSubmit={handleAnalyze} isLoading={isLoading} />
 
       {/* Error */}
       {error && (
@@ -488,7 +488,7 @@ export default function Home() {
       {/* Status bar */}
       <footer className="status-footer">
         <span>SPORTS AI TERMINAL v1.0.0</span>
-        <span>13 AGENTES | POISSON + ML + MONTE CARLO</span>
+        <span>15 AGENTES | DAG PARALELO + MONTE CARLO + SÍNTESIS</span>
         <span>
           <span style={{ color: 'var(--accent-green)' }}>●</span> CONECTADO
         </span>

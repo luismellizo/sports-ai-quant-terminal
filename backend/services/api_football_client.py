@@ -241,10 +241,17 @@ class APIFootballClient:
             fixtures.extend(await self._get_league_fixtures(league_id, season_param))
         elif team_id:
             league_ids = await self._infer_team_leagues(team_id)
-            for team_league_id in league_ids[:8]:
+            for team_league_id in league_ids[:10]:
                 fixtures.extend(await self._get_league_fixtures(team_league_id, season_param))
-            if not fixtures:
-                fixtures.extend(await self._load_daily_window_fixtures())
+            
+            # Siempre cargar los diarios para asegurar partidos de HOY (en caso no viniera en sus ligas top)
+            daily_fixtures = await self._load_daily_window_fixtures()
+            for df in daily_fixtures:
+                if team_id in (
+                    df.get("teams", {}).get("home", {}).get("id"),
+                    df.get("teams", {}).get("away", {}).get("id")
+                ) and df not in fixtures:
+                    fixtures.append(df)
         elif date_str:
             fixtures.extend(await self._get_daily_by_date(date_str))
         else:
@@ -345,6 +352,33 @@ class APIFootballClient:
         fixtures.sort(key=self._fixture_sort_key, reverse=True)
         return fixtures[:last]
 
+    @cached("h2h_stats", ttl=3600)
+    async def get_h2h_stats(self, team1_id: int, team2_id: int, last: int = 20) -> Dict[str, Any]:
+        """Get rich head-to-head stats and fixtures between two teams."""
+        data = await self._request(
+            f"{SPORT_NAME}/head-to-head",
+            {"team1_id": team1_id, "team2_id": team2_id},
+        )
+        h2h_payload = data.get("head-to-head", {})
+        meetings = self._ensure_list(
+            (h2h_payload.get("recent_meetings") or {}).get("match")
+        )
+
+        fixtures = [self._normalize_h2h_match(match) for match in meetings]
+        fixtures = [fixture for fixture in fixtures if fixture]
+        fixtures.sort(key=self._fixture_sort_key, reverse=True)
+        
+        return {
+            "fixtures": fixtures[:last],
+            "overall_record": h2h_payload.get("overall_record", {}),
+            "biggest_victory": h2h_payload.get("biggest_victory", {}),
+            "biggest_defeat": h2h_payload.get("biggest_defeat", {}),
+            "goals": h2h_payload.get("goals", {}),
+            "last5_home": h2h_payload.get("last5_home", {}),
+            "last5_away": h2h_payload.get("last5_away", {}),
+            "leagues": h2h_payload.get("leagues", {})
+        }
+
     # ── Team Statistics ───────────────────────────────────────────
 
     @cached("team_stats", ttl=3600)
@@ -381,6 +415,15 @@ class APIFootballClient:
             league_id=league_id,
             season=season,
         )
+
+    @cached("league_squad_stats", ttl=14400)
+    async def get_league_squad_stats(self, league_id: int) -> Dict[str, Any]:
+        """Get detailed roster statistics for all teams in a league."""
+        data = await self._request(f"{SPORT_NAME}/leagues/{league_id}/stats")
+        league_stats = data.get("league_stats") or {}
+        if not isinstance(league_stats, dict):
+            return {}
+        return league_stats.get("league") or {}
 
     # ── Lineups ───────────────────────────────────────────────────
 
@@ -588,14 +631,17 @@ class APIFootballClient:
             f"{SPORT_NAME}/leagues/{league_id}/standings",
             params=params,
         )
-        standings = data.get("standings", {})
+        standings = data.get("standings") or {}
 
         # Some leagues fail with season filter on Statpal free tier.
         if not standings and season_param:
             data = await self._request(f"{SPORT_NAME}/leagues/{league_id}/standings")
-            standings = data.get("standings", {})
+            standings = data.get("standings") or {}
 
-        tournament = standings.get("tournament", {})
+        if not isinstance(standings, dict):
+            return []
+
+        tournament = standings.get("tournament") or {}
         parsed_rows = self._parse_standing_rows(tournament)
         if not parsed_rows:
             return []
@@ -1236,10 +1282,10 @@ class APIFootballClient:
         if not isinstance(row, dict):
             return None
 
-        overall = row.get("overall") or {}
-        home = row.get("home") or {}
-        away = row.get("away") or {}
-        total = row.get("total") or {}
+        overall = self._ensure_dict(row.get("overall"))
+        home = self._ensure_dict(row.get("home"))
+        away = self._ensure_dict(row.get("away"))
+        total = self._ensure_dict(row.get("total"))
 
         played = self._to_int(overall.get("games_played"), 0)
         parsed = {
@@ -1387,23 +1433,30 @@ class APIFootballClient:
         status = self._clean_text(
             fixture.get("fixture", {}).get("status", {}).get("short")
         ).upper()
+        
+        # Explicit early returns based on status string from API Provider
         if status in {"FT", "AET", "PEN", "AWD", "WO", "CANC", "ABD"}:
             return True
-        if status == "LIVE":
+        if status in {"NS", "TBD", "PST", "LIVE", "1H", "HT", "2H", "ET", "BT", "P", "INT", "SUSP"}:
             return False
+            
         if status.isdigit():
             return int(status) >= 90
 
         goals = fixture.get("goals", {})
         home_goals = goals.get("home")
         away_goals = goals.get("away")
+        
+        # Fallback heuristic: only assume it's finished if goals are present AND the date is strictly PAST (not today),
+        # because sometimes providers set goals to 0-0 early for today's matches.
         if home_goals is not None and away_goals is not None:
             fixture_date = self._parse_datetime(
                 fixture.get("fixture", {}).get("date"),
                 "00:00",
             )
-            if fixture_date and fixture_date.date() <= date.today():
+            if fixture_date and fixture_date.date() < date.today():
                 return True
+                
         return False
 
     @staticmethod
@@ -1590,6 +1643,14 @@ class APIFootballClient:
         if isinstance(value, list):
             return value
         return [value]
+
+    @staticmethod
+    def _ensure_dict(value: Any) -> Dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, list) and len(value) > 0 and isinstance(value[0], dict):
+            return value[0]
+        return {}
 
     @staticmethod
     def _clean_text(value: Any, default: str = "") -> str:

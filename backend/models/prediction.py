@@ -35,7 +35,7 @@ class AgentResult(BaseModel):
     agent_name: str
     status: AgentStatus = AgentStatus.PENDING
     execution_time_ms: float = 0
-    data: Dict = {}
+    data: Dict = Field(default_factory=dict)
     error: Optional[str] = None
 
 
@@ -92,8 +92,8 @@ class MonteCarloResult(BaseModel):
     avg_goals_home: float = 0.0
     avg_goals_away: float = 0.0
     most_likely_score: str = "0-0"
-    goal_distribution: Dict[str, float] = {}
-    score_distribution: List[ScoreProb] = []
+    goal_distribution: Dict[str, float] = Field(default_factory=dict)
+    score_distribution: List[ScoreProb] = Field(default_factory=list)
 
 
 class TeamStatsSummary(BaseModel):
@@ -111,8 +111,8 @@ class MatchInsights(BaseModel):
     history_summary: str = ""
     home_injury_count: int = 0
     away_injury_count: int = 0
-    home_stats: TeamStatsSummary = TeamStatsSummary()
-    away_stats: TeamStatsSummary = TeamStatsSummary()
+    home_stats: TeamStatsSummary = Field(default_factory=TeamStatsSummary)
+    away_stats: TeamStatsSummary = Field(default_factory=TeamStatsSummary)
 
 
 class PredictionResult(BaseModel):
@@ -127,22 +127,22 @@ class PredictionResult(BaseModel):
     league: Optional[str] = None
 
     # Agent results timeline
-    agents: List[AgentResult] = []
+    agents: List[AgentResult] = Field(default_factory=list)
 
     # Core predictions
-    probabilities: ProbabilityDistribution = ProbabilityDistribution()
-    expected_goals: ExpectedGoals = ExpectedGoals()
-    score_matrix: List[ScoreProb] = []
-    monte_carlo: MonteCarloResult = MonteCarloResult()
+    probabilities: ProbabilityDistribution = Field(default_factory=ProbabilityDistribution)
+    expected_goals: ExpectedGoals = Field(default_factory=ExpectedGoals)
+    score_matrix: List[ScoreProb] = Field(default_factory=list)
+    monte_carlo: MonteCarloResult = Field(default_factory=MonteCarloResult)
 
     # Market analysis
-    market_edges: List[MarketEdge] = []
+    market_edges: List[MarketEdge] = Field(default_factory=list)
 
     # Final recommendation
     best_bet: Optional[BetRecommendation] = None
     
     # Textual Insights
-    insights: MatchInsights = MatchInsights()
+    insights: MatchInsights = Field(default_factory=MatchInsights)
 
     # Metadata
     total_execution_time_ms: float = 0

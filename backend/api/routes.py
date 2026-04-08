@@ -6,7 +6,8 @@ FastAPI routes for the sports prediction system.
 import json
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
-from backend.agents.orchestrator_agent import OrchestratorAgent
+from backend.agents.core.orchestrator import PipelineOrchestrator
+from backend.agents.registry import discover_agents, all_agents
 from backend.services.api_football_client import get_api_football_client
 from backend.config.database import async_session
 from backend.models.prediction_record import PredictionRecord
@@ -37,8 +38,11 @@ async def _save_prediction(prediction_data: dict):
             executive_summary=prediction_data.get("executive_summary", ""),
             verdict=prediction_data.get("verdict", ""),
             total_execution_time_ms=prediction_data.get("total_execution_time_ms", 0),
-            fixture_id=prediction_data.get("fixture_resolution", {}).get("fixture_id")
-                if isinstance(prediction_data.get("fixture_resolution"), dict) else None,
+            fixture_id=(
+                prediction_data.get("fixture_resolution", {}).get("fixture_id")
+                if isinstance(prediction_data.get("fixture_resolution"), dict)
+                else prediction_data.get("fixture_id")
+            ),
         )
 
         async with async_session() as session:
@@ -63,7 +67,7 @@ async def analyze_match(body: dict):
     if not query:
         return {"error": "Query is required"}
 
-    orchestrator = OrchestratorAgent()
+    orchestrator = PipelineOrchestrator()
 
     async def event_stream():
         async for event in orchestrator.run_pipeline(query):
@@ -97,7 +101,7 @@ async def analyze_match_sync(body: dict):
     if not query:
         return {"error": "Query is required"}
 
-    orchestrator = OrchestratorAgent()
+    orchestrator = PipelineOrchestrator()
     result = None
 
     async for event in orchestrator.run_pipeline(query):
@@ -182,3 +186,45 @@ async def get_prediction(prediction_id: str):
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "service": "sports-ai"}
+
+
+@router.get("/health/live")
+async def health_live():
+    """Liveness check for orchestration platforms."""
+    return {"status": "alive", "service": "sports-ai"}
+
+
+@router.get("/health/ready")
+async def health_ready():
+    """Readiness check that verifies the registry and database are reachable."""
+    discover_agents()
+    agents_loaded = len(all_agents()) > 0
+    db_ok = False
+    redis_ok = False
+    try:
+        from sqlalchemy import text
+
+        async with async_session() as session:
+            await session.execute(text("SELECT 1"))
+            db_ok = True
+    except Exception as exc:
+        logger.warning(f"Readiness DB check failed: {exc}")
+
+    try:
+        from backend.utils.cache import get_redis
+
+        redis_client = await get_redis()
+        redis_ok = bool(await redis_client.ping())
+    except Exception as exc:
+        logger.warning(f"Readiness Redis check failed: {exc}")
+
+    status = "ready" if agents_loaded and db_ok and redis_ok else "degraded"
+    return {
+        "status": status,
+        "service": "sports-ai",
+        "checks": {
+            "agents_loaded": agents_loaded,
+            "database": db_ok,
+            "redis": redis_ok,
+        },
+    }

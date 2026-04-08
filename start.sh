@@ -45,16 +45,20 @@ echo -e "${YELLOW}[1/2] Arrancando Backend...${NC}"
 cd "$BASE_DIR"
 
 # Activar entorno global de Python como se indica en tus reglas
-PYTHON_ENV="$HOME/.python-global/bin/activate"
-if [ -f "$PYTHON_ENV" ]; then
-    source "$PYTHON_ENV"
-    echo -e " - Entorno virtual activado: $PYTHON_ENV"
+PYTHON_ENV_BACKEND="$BASE_DIR/backend/venv/bin/activate"
+PYTHON_ENV_GLOBAL="$HOME/.python-global/bin/activate"
+if [ -f "$PYTHON_ENV_BACKEND" ]; then
+    source "$PYTHON_ENV_BACKEND"
+    echo -e " - Entorno virtual activado: $PYTHON_ENV_BACKEND"
+elif [ -f "$PYTHON_ENV_GLOBAL" ]; then
+    source "$PYTHON_ENV_GLOBAL"
+    echo -e " - Entorno virtual activado: $PYTHON_ENV_GLOBAL"
 else
-    echo -e "${RED}Advertencia: Entorno python global no encontrado en $PYTHON_ENV.${NC}"
+    echo -e "${YELLOW}Advertencia: no se encontró un entorno virtual, se usará el Python del sistema.${NC}"
 fi
 
 # Iniciar backend en segundo plano
-uvicorn backend.main:app --reload --port 8000 &
+python3 -m uvicorn backend.main:app --reload --port 8000 &
 BACKEND_PID=$!
 echo -e "${GREEN} -> Backend iniciado correctamente (PID: $BACKEND_PID)${NC}\n"
 

@@ -104,6 +104,7 @@ export default function MonteCarloChart({ data }: MonteCarloChartProps) {
                                         fontSize: '12px',
                                         fontFamily: "'JetBrains Mono', monospace",
                                     }}
+                                    itemStyle={{ color: '#ffffff' }}
                                     formatter={(value) => [`${value}%`, 'Probabilidad']}
                                 />
                                 <Bar dataKey="probability" radius={[3, 3, 0, 0]}>

@@ -25,7 +25,18 @@ admin_router = APIRouter(prefix="/api/admin")
 
 
 def _generate_token(user: str) -> str:
-    """Generate a simple HMAC token for admin sessions."""
+    """Generate an expiring HMAC token for admin sessions."""
+    expires_at = int(time.time()) + int(settings.admin_token_ttl_seconds)
+    payload = f"{user}:{expires_at}:{settings.admin_secret_key}"
+    signature = hmac.new(
+        settings.admin_secret_key.encode(),
+        payload.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{user}.{expires_at}.{signature}"
+
+
+def _generate_legacy_token(user: str) -> str:
     payload = f"{user}:{settings.admin_secret_key}"
     return hmac.new(
         settings.admin_secret_key.encode(),
@@ -36,8 +47,31 @@ def _generate_token(user: str) -> str:
 
 def _verify_token(token: str) -> bool:
     """Verify the admin token."""
-    expected = _generate_token(settings.admin_user)
-    return hmac.compare_digest(token, expected)
+    if not token:
+        return False
+
+    # New format: user.expiry.signature
+    parts = token.split(".")
+    if len(parts) == 3:
+        user, expires_at_raw, signature = parts
+        try:
+            expires_at = int(expires_at_raw)
+        except ValueError:
+            return False
+        if expires_at < int(time.time()):
+            return False
+
+        payload = f"{user}:{expires_at}:{settings.admin_secret_key}"
+        expected = hmac.new(
+            settings.admin_secret_key.encode(),
+            payload.encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        return hmac.compare_digest(signature, expected)
+
+    # Backward-compatible legacy format.
+    expected_legacy = _generate_legacy_token(settings.admin_user)
+    return hmac.compare_digest(token, expected_legacy)
 
 
 def _require_admin(authorization: Optional[str] = Header(None)):
@@ -59,7 +93,11 @@ async def admin_login(body: dict):
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
     token = _generate_token(user)
-    return {"token": token, "user": user}
+    return {
+        "token": token,
+        "user": user,
+        "expires_in": settings.admin_token_ttl_seconds,
+    }
 
 
 @admin_router.get("/predictions")

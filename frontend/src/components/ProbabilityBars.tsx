@@ -52,9 +52,9 @@ export default function ProbabilityBars({ probabilities, homeTeam, awayTeam }: P
                                     style={{
                                         height: '100%',
                                         width: `${item.value}%`,
-                                        background: `linear-gradient(90deg, ${colors.bar}88, ${colors.bar})`,
+                                        background: `linear-gradient(90deg, color-mix(in srgb, ${colors.bar} 40%, transparent), ${colors.bar})`,
                                         borderRadius: '4px',
-                                        boxShadow: `0 0 10px ${colors.bar}40`,
+                                        boxShadow: `0 0 10px ${colors.glow}`,
                                         transition: 'width 1s ease-out',
                                     }}
                                 />
